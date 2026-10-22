@@ -1,0 +1,202 @@
+// src/App.tsx
+import { useState, useMemo } from 'react';
+import { Header } from './components/Header';
+import { ModuleA_TaxShield } from './components/ModuleA_TaxShield';
+import { ModuleB_AmortizationRecast } from './components/ModuleB_AmortizationRecast';
+import { ModuleC_OpportunityCost } from './components/ModuleC_OpportunityCost';
+import { ModuleD_CemaRefinance } from './components/ModuleD_CemaRefinance';
+import { AuditValidationModal } from './components/AuditValidationModal';
+import { TAX_PROFILES } from './constants/financialData';
+import type { RecastMode, TaxProfile } from './types/financial';
+import { simulateAmortization } from './utils/financialCalculations';
+import { FileText } from 'lucide-react';
+
+export function App() {
+  // Global Strategy & Financial State
+  const [lumpSum, setLumpSum] = useState<number>(0);
+  const [extraMonthly, setExtraMonthly] = useState<number>(0);
+  const [recastMode, setRecastMode] = useState<RecastMode>('no_recast');
+  const [stopAt750k, setStopAt750k] = useState<boolean>(false);
+  const [resetRate, setResetRate] = useState<number>(0.1075); // 10.750% max first reset / lifetime cap
+  const [taxProfile, setTaxProfile] = useState<TaxProfile>(TAX_PROFILES.profile_b);
+  const [activeTab, setActiveTab] = useState<string>('unified');
+  const [isAuditModalOpen, setIsAuditModalOpen] = useState<boolean>(false);
+
+  // Compute live strategy simulation
+  const simulation = useMemo(() => {
+    return simulateAmortization({
+      lumpSum,
+      extraMonthly,
+      recastMode,
+      stopAt750k,
+      resetRate,
+      taxProfile,
+    });
+  }, [lumpSum, extraMonthly, recastMode, stopAt750k, resetRate, taxProfile]);
+
+  const handleApplyStrategy = (
+    newLump: number,
+    newExtra: number,
+    newRecast: RecastMode
+  ) => {
+    setLumpSum(newLump);
+    setExtraMonthly(newExtra);
+    setRecastMode(newRecast);
+  };
+
+  return (
+    <div className="min-h-screen bg-[#0B0F19] text-slate-100 flex flex-col font-sans selection:bg-blue-600/30">
+      {/* Sticky Institutional Header */}
+      <Header
+        activeTab={activeTab}
+        setActiveTab={setActiveTab}
+        onOpenAuditModal={() => setIsAuditModalOpen(true)}
+      />
+
+      {/* Main Interactive Work Area */}
+      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-8">
+        {/* Loan Context Briefing Bar */}
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between px-4 py-3 rounded-xl bg-slate-900/40 border border-white/5 text-xs text-slate-400 gap-2">
+          <div className="flex items-center space-x-2">
+            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+            <span className="text-slate-300 font-medium">Audit Reference Model Active:</span>
+            <span>Wells Fargo Loan #0813684933 (10/6m SOFR ARM)</span>
+          </div>
+          <div className="flex items-center space-x-4">
+            <span>
+              Fixed Margin Floor: <strong className="text-slate-200">5.750%</strong> (107 mos to 09/2035)
+            </span>
+            <span className="text-slate-600">•</span>
+            <span>
+              Caps: <strong className="text-slate-200">5/1/5 (10.750% Max)</strong>
+            </span>
+          </div>
+        </div>
+
+        {/* Tab 1: Unified Command Center View */}
+        {activeTab === 'unified' && (
+          <div className="space-y-8">
+            <section>
+              <ModuleA_TaxShield
+                simulation={simulation}
+                taxProfile={taxProfile}
+                lumpSum={lumpSum}
+                onSelectTier1Preset={() => setLumpSum(90532.21)}
+              />
+            </section>
+
+            <section>
+              <ModuleB_AmortizationRecast
+                lumpSum={lumpSum}
+                setLumpSum={setLumpSum}
+                extraMonthly={extraMonthly}
+                setExtraMonthly={setExtraMonthly}
+                recastMode={recastMode}
+                setRecastMode={setRecastMode}
+                stopAt750k={stopAt750k}
+                setStopAt750k={setStopAt750k}
+                resetRate={resetRate}
+                setResetRate={setResetRate}
+                simulation={simulation}
+                taxProfile={taxProfile}
+              />
+            </section>
+
+            <section>
+              <ModuleC_OpportunityCost
+                taxProfile={taxProfile}
+                setTaxProfile={setTaxProfile}
+                lumpSum={lumpSum}
+                extraMonthly={extraMonthly}
+              />
+            </section>
+
+            <section>
+              <ModuleD_CemaRefinance />
+            </section>
+          </div>
+        )}
+
+        {/* Tab 2: Module A Focus */}
+        {activeTab === 'moduleA' && (
+          <ModuleA_TaxShield
+            simulation={simulation}
+            taxProfile={taxProfile}
+            lumpSum={lumpSum}
+            onSelectTier1Preset={() => setLumpSum(90532.21)}
+          />
+        )}
+
+        {/* Tab 3: Module B Focus */}
+        {activeTab === 'moduleB' && (
+          <ModuleB_AmortizationRecast
+            lumpSum={lumpSum}
+            setLumpSum={setLumpSum}
+            extraMonthly={extraMonthly}
+            setExtraMonthly={setExtraMonthly}
+            recastMode={recastMode}
+            setRecastMode={setRecastMode}
+            stopAt750k={stopAt750k}
+            setStopAt750k={setStopAt750k}
+            resetRate={resetRate}
+            setResetRate={setResetRate}
+            simulation={simulation}
+            taxProfile={taxProfile}
+          />
+        )}
+
+        {/* Tab 4: Module C Focus */}
+        {activeTab === 'moduleC' && (
+          <ModuleC_OpportunityCost
+            taxProfile={taxProfile}
+            setTaxProfile={setTaxProfile}
+            lumpSum={lumpSum}
+            extraMonthly={extraMonthly}
+          />
+        )}
+
+        {/* Tab 5: Module D Focus */}
+        {activeTab === 'moduleD' && <ModuleD_CemaRefinance />}
+      </main>
+
+      {/* Institutional Footer */}
+      <footer className="border-t border-white/10 bg-[#090D15] mt-12 py-8 text-xs text-slate-500">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-4">
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+            <div>
+              <div className="font-semibold text-slate-300">
+                Bergen Street Jumbo ARM & Capital Allocation Optimizer
+              </div>
+              <div className="text-[11px] text-slate-400 mt-0.5">
+                Property: 323 Bergen St Apt 408W, Brooklyn, NY 11217 • Samantha Martin (Wells Fargo Loan #0813684933)
+              </div>
+            </div>
+            <div className="flex items-center space-x-4 text-[11px]">
+              <button
+                onClick={() => setIsAuditModalOpen(true)}
+                className="hover:text-slate-300 transition-colors cursor-pointer text-emerald-400 flex items-center space-x-1"
+              >
+                <FileText className="w-3.5 h-3.5" />
+                <span>Verify Mathematical Audit</span>
+              </button>
+              <span>•</span>
+              <span>IRC §163(h)(3) & NY Form IT-196 Compliant</span>
+            </div>
+          </div>
+          <p className="text-[10px] text-slate-400 leading-relaxed border-t border-white/5 pt-4">
+            Disclaimer: For institutional private wealth planning and financial modeling purposes only. Calculations reflect verified 30-day SOFR ARM parameters, Kings County statutory recording taxes, and New York state/city tax law decoupled mortgage interest deduction limitations as of October 2026. Consult certified tax advisors and mortgage lenders before executing contractual recasts or refinances.
+          </p>
+        </div>
+      </footer>
+
+      {/* Audit Validation Modal */}
+      <AuditValidationModal
+        isOpen={isAuditModalOpen}
+        onClose={() => setIsAuditModalOpen(false)}
+        onApplyStrategy={handleApplyStrategy}
+      />
+    </div>
+  );
+}
+
+export default App;
