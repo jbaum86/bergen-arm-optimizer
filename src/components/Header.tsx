@@ -15,12 +15,14 @@ interface HeaderProps {
   activeTab: string;
   setActiveTab: (tab: string) => void;
   onOpenAuditModal: () => void;
+  onLock: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
   activeTab,
   setActiveTab,
   onOpenAuditModal,
+  onLock,
 }) => {
   const tabs = [
     { id: 'unified', label: 'Command Center', icon: Layers },
@@ -59,8 +61,8 @@ export const Header: React.FC<HeaderProps> = ({
           </div>
 
           {/* Right: Quick Loan Stat Pill & Audit Verification Action */}
-          <div className="flex items-center space-x-3 self-end lg:self-center flex-wrap">
-            <div className="hidden sm:flex flex-col text-right">
+          <div className="flex items-center space-x-2.5 self-end lg:self-center flex-wrap">
+            <div className="hidden sm:flex flex-col text-right pr-1">
               <span className="text-[10px] uppercase tracking-wider text-slate-400 font-medium">Post-10/01 Balance</span>
               <span className="text-sm font-mono-numbers font-semibold text-emerald-400">
                 {formatCurrency(BASELINE_LOAN.activeStartingBalance)}
@@ -73,6 +75,14 @@ export const Header: React.FC<HeaderProps> = ({
             >
               <FileCheck2 className="w-3.5 h-3.5" />
               <span>Audit Verifier</span>
+            </button>
+            <button
+              onClick={onLock}
+              title="Lock portal"
+              className="flex items-center space-x-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium bg-white/5 hover:bg-white/10 text-slate-300 hover:text-white border border-white/10 transition-all cursor-pointer"
+            >
+              <ShieldCheck className="w-3.5 h-3.5 text-blue-400" />
+              <span className="hidden sm:inline">Lock</span>
             </button>
           </div>
         </div>

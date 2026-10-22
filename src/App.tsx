@@ -6,12 +6,21 @@ import { ModuleB_AmortizationRecast } from './components/ModuleB_AmortizationRec
 import { ModuleC_OpportunityCost } from './components/ModuleC_OpportunityCost';
 import { ModuleD_CemaRefinance } from './components/ModuleD_CemaRefinance';
 import { AuditValidationModal } from './components/AuditValidationModal';
+import { LockScreen } from './components/LockScreen';
 import { TAX_PROFILES } from './constants/financialData';
 import type { RecastMode, TaxProfile } from './types/financial';
 import { simulateAmortization } from './utils/financialCalculations';
 import { FileText } from 'lucide-react';
 
 export function App() {
+  // Authentication State
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
+    return (
+      localStorage.getItem('bergen_arm_auth') === 'authorized' ||
+      sessionStorage.getItem('bergen_arm_auth') === 'authorized'
+    );
+  });
+
   // Global Strategy & Financial State
   const [lumpSum, setLumpSum] = useState<number>(0);
   const [extraMonthly, setExtraMonthly] = useState<number>(0);
@@ -44,6 +53,17 @@ export function App() {
     setRecastMode(newRecast);
   };
 
+  const handleLock = () => {
+    localStorage.removeItem('bergen_arm_auth');
+    sessionStorage.removeItem('bergen_arm_auth');
+    setIsAuthenticated(false);
+  };
+
+  // If not authenticated, render password lock screen
+  if (!isAuthenticated) {
+    return <LockScreen onUnlock={() => setIsAuthenticated(true)} />;
+  }
+
   return (
     <div className="min-h-screen bg-[#0B0F19] text-slate-100 flex flex-col font-sans selection:bg-blue-600/30">
       {/* Sticky Institutional Header */}
@@ -51,6 +71,7 @@ export function App() {
         activeTab={activeTab}
         setActiveTab={setActiveTab}
         onOpenAuditModal={() => setIsAuditModalOpen(true)}
+        onLock={handleLock}
       />
 
       {/* Main Interactive Work Area */}
