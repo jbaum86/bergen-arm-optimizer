@@ -1,4 +1,4 @@
-import type { LoanConstants, TaxProfile, RelationshipDiscountTier, TaxReturnInputs } from '../types/financial';
+import type { LoanConstants, TaxProfile, TaxReturnInputs } from '../types/financial';
 
 export const BASELINE_LOAN: LoanConstants = {
   propertyAddress: '323 Bergen St Apt 408W, Brooklyn, NY 11217',
@@ -7,8 +7,9 @@ export const BASELINE_LOAN: LoanConstants = {
   originalLoanDate: '2025-09-01',
   originalBalance: 1106000.0,
   loanNumber: '0813684933',
-  borrowerName: 'Samantha Martin',
+  borrowerName: 'Primary Borrower',
   statementBalance: 1091755.20,
+
   activeStartingBalance: 1090532.21,
   currentInterestRate: 0.0575, // 5.750%
   currentMonthlyPI: 6454.32,
@@ -94,59 +95,6 @@ export const DEFAULT_TAX_RETURN_INPUTS: TaxReturnInputs = {
   rateModeToApply: 'marginal',
 };
 
-
-export const RELATIONSHIP_DISCOUNT_TIERS: RelationshipDiscountTier[] = [
-  {
-    label: '$0 – $19,999 Assets',
-    minAssets: 0,
-    maxAssets: 19999,
-    rateDiscount: 0.0,
-    closingCostCredit: 0,
-  },
-  {
-    label: '$20,000 – $249,999 Assets',
-    minAssets: 20000,
-    maxAssets: 249999,
-    rateDiscount: 0.0,
-    closingCostCredit: 500,
-  },
-  {
-    label: '$250,000 – $499,999 Assets',
-    minAssets: 250000,
-    maxAssets: 499999,
-    rateDiscount: 0.00125, // -0.125%
-    closingCostCredit: 0,
-  },
-  {
-    label: '$500,000 – $999,999 Assets',
-    minAssets: 500000,
-    maxAssets: 999999,
-    rateDiscount: 0.0025, // -0.250%
-    closingCostCredit: 0,
-  },
-  {
-    label: '$1,000,000+ Transferred Assets',
-    minAssets: 1000000,
-    maxAssets: 4999999,
-    rateDiscount: 0.0050, // -0.500%
-    closingCostCredit: 0,
-  },
-  {
-    label: '$5,000,000+ Private Client Tier',
-    minAssets: 5000000,
-    maxAssets: 999999999,
-    rateDiscount: 0.0075, // -0.750% (can scale up to -1.250%)
-    closingCostCredit: 0,
-  },
-];
-
-export const REFINANCE_RATE_BENCHMARKS = [
-  { label: 'October 2026 30-Yr Jumbo', rate: 0.0745 },
-  { label: 'NY High-Balance Conforming', rate: 0.0725 },
-  { label: '15-Yr Jumbo Benchmark', rate: 0.0691 },
-  { label: '7/6m ARM Benchmark', rate: 0.0650 },
-  { label: 'Future Target Refi Rate', rate: 0.0500 },
-];
 
 export const PRESET_CURTAILMENTS = [
   { label: '$0 Baseline', value: 0 },

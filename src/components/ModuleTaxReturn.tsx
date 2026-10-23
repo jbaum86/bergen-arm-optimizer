@@ -79,8 +79,9 @@ export const ModuleTaxReturn: React.FC<ModuleTaxReturnProps> = ({
   const handleReset = () => {
     setInputs(DEFAULT_TAX_RETURN_INPUTS);
     onResetToBaseline();
-    setSaveSuccessMessage('Reset to Samantha Martin baseline tax profile.');
+    setSaveSuccessMessage('Reset to verified baseline tax profile.');
     setTimeout(() => {
+
       setSaveSuccessMessage(null);
     }, 4000);
   };

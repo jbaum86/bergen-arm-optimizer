@@ -3,8 +3,8 @@ import { Header } from './components/Header';
 import { ModuleA_TaxShield } from './components/ModuleA_TaxShield';
 import { ModuleB_AmortizationRecast } from './components/ModuleB_AmortizationRecast';
 import { ModuleC_OpportunityCost } from './components/ModuleC_OpportunityCost';
-import { ModuleD_CemaRefinance } from './components/ModuleD_CemaRefinance';
 import { ModuleTaxReturn } from './components/ModuleTaxReturn';
+
 import { AuditValidationModal } from './components/AuditValidationModal';
 import { LockScreen } from './components/LockScreen';
 import { TAX_PROFILES, DEFAULT_TAX_RETURN_INPUTS } from './constants/financialData';
@@ -196,10 +196,6 @@ export function App() {
                 taxReturnInputs={taxReturnInputs}
               />
             </section>
-
-            <section>
-              <ModuleD_CemaRefinance />
-            </section>
           </div>
         )}
 
@@ -242,11 +238,7 @@ export function App() {
           />
         )}
 
-
-        {/* Tab 5: Module D Focus */}
-        {activeTab === 'moduleD' && <ModuleD_CemaRefinance />}
-
-        {/* Tab 6: Module Tax Return Intake & Calibration */}
+        {/* Tab 5: Module Tax Return Intake & Calibration */}
         {activeTab === 'moduleTax' && (
           <ModuleTaxReturn
             taxReturnInputs={taxReturnInputs}
@@ -258,7 +250,6 @@ export function App() {
         )}
       </main>
 
-
       {/* Institutional Footer */}
       <footer className="border-t border-white/10 bg-[#090D15] mt-12 py-8 text-xs text-slate-500">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-4">
@@ -268,9 +259,10 @@ export function App() {
                 Bergen Street Jumbo ARM & Capital Allocation Optimizer
               </div>
               <div className="text-[11px] text-slate-400 mt-0.5">
-                Property: 323 Bergen St Apt 408W, Brooklyn, NY 11217 • Samantha Martin (Wells Fargo Loan #0813684933)
+                Property: 323 Bergen St Apt 408W, Brooklyn, NY 11217 • Primary Borrower (Wells Fargo Loan #0813684933)
               </div>
             </div>
+
             <div className="flex items-center space-x-4 text-[11px]">
               <button
                 onClick={() => setIsAuditModalOpen(true)}

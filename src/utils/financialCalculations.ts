@@ -7,8 +7,6 @@ import type {
   StrategySimulationResult,
   AmortizationMonth,
   AssetBenchmark,
-  RefinanceOption,
-  RelationshipDiscountTier,
   TaxReturnInputs,
   TaxReturnAnalysis,
   FilingStatus,
@@ -414,76 +412,6 @@ export function calculateAlternativeAssets({
   return benchmarks;
 }
 
-/**
- * Calculate NYC CEMA Refinance & Wells Fargo Relationship Pricing
- */
-export function calculateRefinanceAnalysis({
-  targetRate,
-  termMonths,
-  termLabel,
-  isCema,
-  relationshipTier,
-  currentBalance = BASELINE_LOAN.activeStartingBalance,
-}: {
-  targetRate: number;
-  termMonths: number;
-  termLabel: string;
-  isCema: boolean;
-  relationshipTier: RelationshipDiscountTier;
-  currentBalance?: number;
-}): RefinanceOption {
-  const netRate = Math.max(0.01, targetRate - relationshipTier.rateDiscount);
-  const newMonthlyPI = calculatePmt(currentBalance, netRate, termMonths);
-  const monthlySavings = BASELINE_LOAN.currentMonthlyPI - newMonthlyPI;
-
-  // Closing costs
-  // Standard NYC Mortgage Recording Tax (residential >= $500k): 1.925%
-  const mortgageRecordingTax = isCema ? 0 : currentBalance * 0.01925;
-  const standardClosingFees = 8500.0;
-  const cemaAssignmentFees = isCema ? 2500.0 : 0.0;
-  const relationshipCredit = relationshipTier.closingCostCredit;
-
-  const totalNetClosingCost = Math.max(
-    0,
-    mortgageRecordingTax + standardClosingFees + cemaAssignmentFees - relationshipCredit
-  );
-
-  const standardTotalCost = currentBalance * 0.01925 + standardClosingFees;
-  const cemaTotalCost = standardClosingFees + 2500.0;
-  const cemaSavings = Math.max(0, standardTotalCost - cemaTotalCost);
-
-  // Payback period
-  const breakEvenMonths = monthlySavings > 0 ? totalNetClosingCost / monthlySavings : 999;
-
-  // 8.9-Year (107 months) Net Present Value to 09/01/2035 reset
-  const discountRateMonthly = BASELINE_LOAN.currentInterestRate / 12; // 5.75% / 12
-  let pvSavings = 0;
-  for (let m = 1; m <= BASELINE_LOAN.fixedMonthsRemaining; m++) {
-    pvSavings += monthlySavings / Math.pow(1 + discountRateMonthly, m);
-  }
-  const npv8_9Years = pvSavings - totalNetClosingCost;
-
-  return {
-    targetRate,
-    termMonths,
-    termLabel,
-    isCema,
-    relationshipTier,
-    netRate,
-    newMonthlyPI,
-    monthlySavings,
-    upfrontCosts: {
-      mortgageRecordingTax,
-      standardClosingFees,
-      cemaAssignmentFees,
-      relationshipCredit,
-      totalNetClosingCost,
-      cemaSavings,
-    },
-    breakEvenMonths,
-    npv8_9Years,
-  };
-}
 
 /**
  * Determine statutory marginal tax rates from taxable income and filing status

@@ -4,7 +4,6 @@ import {
   ShieldCheck,
   Sliders,
   TrendingUp,
-  Landmark,
   Layers,
   Calculator,
 } from 'lucide-react';
@@ -31,10 +30,8 @@ export const Header: React.FC<HeaderProps> = ({
     { id: 'moduleA', label: 'Debt Stack & Tax Shield', icon: ShieldCheck },
     { id: 'moduleB', label: 'Recast & Reset Stress-Test', icon: Sliders },
     { id: 'moduleC', label: 'Alternative Opportunity Cost', icon: TrendingUp },
-    { id: 'moduleD', label: 'NYC CEMA & Relationship Refi', icon: Landmark },
     { id: 'moduleTax', label: 'Tax Return & Rate Engine', icon: Calculator, badge: isReturnDriven },
   ];
-
 
   return (
     <header className="border-b border-white/10 bg-[#0B0F19]/90 backdrop-blur-xl sticky top-0 z-40">
@@ -55,7 +52,7 @@ export const Header: React.FC<HeaderProps> = ({
                 </span>
               </div>
               <div className="flex items-center space-x-3 text-xs text-slate-400 mt-0.5 flex-wrap">
-                <span>Borrower: <strong className="text-slate-200">{BASELINE_LOAN.borrowerName}</strong></span>
+                <span>Account: <strong className="text-slate-200">Primary Borrower</strong></span>
                 <span className="text-slate-600">•</span>
                 <span>Loan #: <strong className="text-slate-200">{BASELINE_LOAN.loanNumber}</strong></span>
                 <span className="text-slate-600">•</span>
@@ -63,6 +60,7 @@ export const Header: React.FC<HeaderProps> = ({
               </div>
             </div>
           </div>
+
 
           {/* Right: Quick Loan Stat Pill & Audit Verification Action */}
           <div className="flex items-center space-x-2.5 self-end lg:self-center flex-wrap">

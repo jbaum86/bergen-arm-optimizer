@@ -142,8 +142,9 @@ export const ModuleA_TaxShield: React.FC<ModuleAProps> = ({
             </div>
 
             <p className="text-xs text-slate-400 mt-1">
-              Visual segmentation of Samantha Martin's mortgage by statutory deductibility thresholds (IRC §163(h)(3) & NY Form IT-196).
+              Visual segmentation of the mortgage debt stack by statutory deductibility thresholds (IRC §163(h)(3) & NY Form IT-196).
             </p>
+
           </div>
 
           {!isTier1Cleared && (

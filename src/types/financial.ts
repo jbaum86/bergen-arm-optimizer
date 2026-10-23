@@ -145,31 +145,3 @@ export interface AssetBenchmark {
   taxTreatmentNotes: string;
 }
 
-export interface RelationshipDiscountTier {
-  label: string;
-  minAssets: number;
-  maxAssets: number;
-  rateDiscount: number; // in decimal, e.g. 0.0025 for 0.250%
-  closingCostCredit: number;
-}
-
-export interface RefinanceOption {
-  targetRate: number;
-  termMonths: number;
-  termLabel: string;
-  isCema: boolean;
-  relationshipTier: RelationshipDiscountTier;
-  netRate: number;
-  newMonthlyPI: number;
-  monthlySavings: number;
-  upfrontCosts: {
-    mortgageRecordingTax: number;
-    standardClosingFees: number;
-    cemaAssignmentFees: number;
-    relationshipCredit: number;
-    totalNetClosingCost: number;
-    cemaSavings: number;
-  };
-  breakEvenMonths: number;
-  npv8_9Years: number; // Net Present Value to 09/01/2035
-}
