@@ -9,7 +9,11 @@ import type {
   AssetBenchmark,
   RefinanceOption,
   RelationshipDiscountTier,
+  TaxReturnInputs,
+  TaxReturnAnalysis,
+  FilingStatus,
 } from '../types/financial';
+
 
 /**
  * Standard fixed-rate monthly principal and interest payment formula
@@ -480,3 +484,148 @@ export function calculateRefinanceAnalysis({
     npv8_9Years,
   };
 }
+
+/**
+ * Determine statutory marginal tax rates from taxable income and filing status
+ */
+export function getStatutoryMarginalRates(
+  fedTaxableIncome: number,
+  nyTaxableIncome: number,
+  filingStatus: FilingStatus
+): { marginalFederal: number; marginalNys: number; marginalNyc: number } {
+  const isJoint = filingStatus === 'married_joint';
+
+  // Federal 2025/2026 Brackets
+  let marginalFederal = 0.10;
+  if (isJoint) {
+    if (fedTaxableIncome > 731200) marginalFederal = 0.37;
+    else if (fedTaxableIncome > 487450) marginalFederal = 0.35;
+    else if (fedTaxableIncome > 383900) marginalFederal = 0.32;
+    else if (fedTaxableIncome > 201050) marginalFederal = 0.24;
+    else if (fedTaxableIncome > 94300) marginalFederal = 0.22;
+    else if (fedTaxableIncome > 23200) marginalFederal = 0.12;
+    else marginalFederal = 0.10;
+  } else {
+    if (fedTaxableIncome > 609350) marginalFederal = 0.37;
+    else if (fedTaxableIncome > 243725) marginalFederal = 0.35;
+    else if (fedTaxableIncome > 191950) marginalFederal = 0.32;
+    else if (fedTaxableIncome > 100525) marginalFederal = 0.24;
+    else if (fedTaxableIncome > 47150) marginalFederal = 0.22;
+    else if (fedTaxableIncome > 11600) marginalFederal = 0.12;
+    else marginalFederal = 0.10;
+  }
+
+  // NY State Brackets (Tax Law § 601)
+  let marginalNys = 0.04;
+  if (isJoint) {
+    if (nyTaxableIncome > 25000000) marginalNys = 0.109;
+    else if (nyTaxableIncome > 5000000) marginalNys = 0.103;
+    else if (nyTaxableIncome > 2155350) marginalNys = 0.0965;
+    else if (nyTaxableIncome > 323200) marginalNys = 0.0965;
+    else if (nyTaxableIncome > 161550) marginalNys = 0.0685;
+    else if (nyTaxableIncome > 43000) marginalNys = 0.060;
+    else if (nyTaxableIncome > 27900) marginalNys = 0.055;
+    else if (nyTaxableIncome > 23600) marginalNys = 0.0525;
+    else if (nyTaxableIncome > 17150) marginalNys = 0.045;
+    else marginalNys = 0.04;
+  } else {
+    if (nyTaxableIncome > 25000000) marginalNys = 0.109;
+    else if (nyTaxableIncome > 5000000) marginalNys = 0.103;
+    else if (nyTaxableIncome > 1077550) marginalNys = 0.0965;
+    else if (nyTaxableIncome > 215400) marginalNys = 0.0685;
+    else if (nyTaxableIncome > 80650) marginalNys = 0.060;
+    else if (nyTaxableIncome > 21400) marginalNys = 0.055;
+    else if (nyTaxableIncome > 13900) marginalNys = 0.0525;
+    else if (nyTaxableIncome > 11700) marginalNys = 0.045;
+    else marginalNys = 0.04;
+  }
+
+  // NYC Resident Tax Brackets (Admin Code § 11-1701)
+  let marginalNyc = 0.03078;
+  if (isJoint) {
+    if (nyTaxableIncome > 90000) marginalNyc = 0.03876;
+    else if (nyTaxableIncome > 45000) marginalNyc = 0.03819;
+    else if (nyTaxableIncome > 21600) marginalNyc = 0.03762;
+    else marginalNyc = 0.03078;
+  } else {
+    if (nyTaxableIncome > 50000) marginalNyc = 0.03876;
+    else if (nyTaxableIncome > 25000) marginalNyc = 0.03819;
+    else if (nyTaxableIncome > 12000) marginalNyc = 0.03762;
+    else marginalNyc = 0.03078;
+  }
+
+  return { marginalFederal, marginalNys, marginalNyc };
+}
+
+/**
+ * NY Tax Law § 615 itemized deduction limitation (clawback)
+ */
+export function calculateNyClawbackPct(nyAgi: number): number {
+  if (nyAgi <= 100000) return 0.0;
+  if (nyAgi <= 475000) return 0.25;
+  if (nyAgi <= 1000000) return 0.50;
+  return 1.0;
+}
+
+/**
+ * Capture Federal & NY Tax Return inputs and compute effective and marginal rates
+ */
+export function calculateTaxReturnRates(inputs: TaxReturnInputs): TaxReturnAnalysis {
+  // Effective Rates (Tax paid / AGI)
+  const effectiveFederalRate =
+    inputs.federalAgi > 0 ? Math.max(0, inputs.federalTotalTax / inputs.federalAgi) : 0;
+  const effectiveNysRate =
+    inputs.nyAgi > 0 ? Math.max(0, inputs.nysTax / inputs.nyAgi) : 0;
+  const effectiveNycRate =
+    inputs.nyAgi > 0 ? Math.max(0, inputs.nycTax / inputs.nyAgi) : 0;
+  const effectiveCombinedRate = effectiveFederalRate + effectiveNysRate + effectiveNycRate;
+
+  // Marginal statutory brackets
+  const { marginalFederal, marginalNys, marginalNyc } = getStatutoryMarginalRates(
+    inputs.federalTaxableIncome,
+    inputs.nyTaxableIncome,
+    inputs.filingStatus
+  );
+
+  const niitRate = inputs.hasNiit ? 0.038 : 0;
+  const marginalCombinedRate = marginalFederal + marginalNys + marginalNyc + niitRate;
+
+  // NY Tax Law § 615 itemized deduction clawback
+  const nyClawbackPct = calculateNyClawbackPct(inputs.nyAgi);
+
+  // Selected rates to apply
+  const isMarginal = inputs.rateModeToApply === 'marginal';
+  const appliedFedRate = isMarginal ? marginalFederal : effectiveFederalRate;
+  const appliedNysRate = isMarginal ? marginalNys : effectiveNysRate;
+  const appliedNycRate = isMarginal ? marginalNyc : effectiveNycRate;
+
+  const appliedProfile: TaxProfile = {
+    id: 'custom',
+    name: `Tax Return (${isMarginal ? 'Marginal' : 'Effective'})`,
+    description: `Form 1040/IT-201: ${(appliedFedRate * 100).toFixed(2)}% Fed / ${(appliedNysRate * 100).toFixed(2)}% NYS / ${(appliedNycRate * 100).toFixed(2)}% NYC`,
+    federalRate: appliedFedRate,
+    nysRate: appliedNysRate,
+    nycRate: appliedNycRate,
+    niitRate,
+    ltcgRate: appliedFedRate >= 0.35 ? 0.20 : 0.15,
+    nyClawbackPct,
+    isReturnDriven: true,
+    effectiveFederalRate,
+    effectiveNysRate,
+    effectiveNycRate,
+  };
+
+  return {
+    effectiveFederalRate,
+    marginalFederalRate: marginalFederal,
+    effectiveNysRate,
+    marginalNysRate: marginalNys,
+    effectiveNycRate,
+    marginalNycRate: marginalNyc,
+    effectiveCombinedRate,
+    marginalCombinedRate,
+    nyClawbackPct,
+    appliedProfile,
+  };
+}
+

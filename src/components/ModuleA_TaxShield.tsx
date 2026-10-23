@@ -128,12 +128,19 @@ export const ModuleA_TaxShield: React.FC<ModuleAProps> = ({
       <div className="glass-panel rounded-2xl p-5 sm:p-6 space-y-5">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
           <div>
-            <div className="flex items-center space-x-2">
+            <div className="flex items-center space-x-2 flex-wrap gap-y-1">
               <h2 className="text-base sm:text-lg font-bold text-white">Three-Tier Mortgage Debt Stack Visualizer</h2>
               <span className="px-2 py-0.5 text-[11px] rounded bg-white/10 text-slate-300 font-mono">
                 Balance: {formatCurrency(currentActiveBalance)}
               </span>
+              {taxProfile.isReturnDriven && (
+                <span className="px-2 py-0.5 text-[10px] rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 font-semibold flex items-center space-x-1">
+                  <ShieldCheck className="w-3 h-3" />
+                  <span>Return-Driven: {formatPercent(taxProfile.federalRate, 1)} Fed / {formatPercent(taxProfile.nysRate, 2)} NYS</span>
+                </span>
+              )}
             </div>
+
             <p className="text-xs text-slate-400 mt-1">
               Visual segmentation of Samantha Martin's mortgage by statutory deductibility thresholds (IRC §163(h)(3) & NY Form IT-196).
             </p>

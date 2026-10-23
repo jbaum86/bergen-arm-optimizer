@@ -1,4 +1,4 @@
-import type { LoanConstants, TaxProfile, RelationshipDiscountTier } from '../types/financial';
+import type { LoanConstants, TaxProfile, RelationshipDiscountTier, TaxReturnInputs } from '../types/financial';
 
 export const BASELINE_LOAN: LoanConstants = {
   propertyAddress: '323 Bergen St Apt 408W, Brooklyn, NY 11217',
@@ -64,6 +64,23 @@ export const TAX_PROFILES: Record<string, TaxProfile> = {
     nyClawbackPct: 1.00,
   },
 };
+
+export const DEFAULT_TAX_RETURN_INPUTS: TaxReturnInputs = {
+  taxYear: 2025,
+  filingStatus: 'single',
+  federalAgi: 550000,
+  federalDeductions: 68400,
+  federalTaxableIncome: 481600,
+  federalTotalTax: 138500,
+  hasNiit: true,
+  nyAgi: 550000,
+  nyDeductions: 82500,
+  nyTaxableIncome: 467500,
+  nysTax: 35200,
+  nycTax: 19500,
+  rateModeToApply: 'marginal',
+};
+
 
 export const RELATIONSHIP_DISCOUNT_TIERS: RelationshipDiscountTier[] = [
   {

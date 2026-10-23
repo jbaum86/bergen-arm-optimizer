@@ -4,7 +4,9 @@ import {
   Percent,
   Sliders,
   Award,
+  CheckCircle2,
 } from 'lucide-react';
+
 import {
   ResponsiveContainer,
   BarChart,
@@ -98,10 +100,27 @@ export const ModuleC_OpportunityCost: React.FC<ModuleCProps> = ({
           </button>
         </div>
 
-        {/* 3 Preset Profiles */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+        {/* Profiles Grid */}
+        <div className={`grid grid-cols-1 ${taxProfile.isReturnDriven ? 'md:grid-cols-4' : 'md:grid-cols-3'} gap-3`}>
+          {taxProfile.isReturnDriven && (
+            <div className="p-4 rounded-xl border border-emerald-500/60 bg-emerald-500/10 shadow-lg shadow-emerald-950/40 ring-1 ring-emerald-500/50 text-left">
+              <div className="flex items-center justify-between mb-1.5">
+                <span className="text-xs font-bold text-white flex items-center space-x-1.5">
+                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                  <span>{taxProfile.name}</span>
+                </span>
+                <span className="text-[10px] uppercase font-mono px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 font-bold">
+                  Active Return
+                </span>
+              </div>
+              <div className="text-[11px] text-emerald-200/90 leading-relaxed font-mono">
+                {taxProfile.description}
+              </div>
+            </div>
+          )}
+
           {Object.values(TAX_PROFILES).map((p) => {
-            const isSelected = taxProfile.id === p.id;
+            const isSelected = !taxProfile.isReturnDriven && taxProfile.id === p.id;
             return (
               <button
                 key={p.id}
@@ -127,6 +146,7 @@ export const ModuleC_OpportunityCost: React.FC<ModuleCProps> = ({
             );
           })}
         </div>
+
 
         {/* Fine-Tuning Sliders (Collapsible) */}
         {showCustomSliders && (

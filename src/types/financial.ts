@@ -2,6 +2,7 @@
 
 export type RecastMode = 'no_recast' | 'free_recast' | 'hybrid_shadow';
 export type LumpSumStrategyMode = 'maintain_flat' | 'take_reduced';
+export type FilingStatus = 'single' | 'married_joint' | 'married_separate' | 'head_household';
 
 export interface TaxProfile {
   id: 'profile_a' | 'profile_b' | 'profile_c' | 'custom';
@@ -13,6 +14,42 @@ export interface TaxProfile {
   niitRate: number;         // e.g. 0.038
   ltcgRate: number;         // e.g. 0.15
   nyClawbackPct: number;    // e.g. 0.50 (50% reduction of NY IT-196)
+  isReturnDriven?: boolean;
+  effectiveFederalRate?: number;
+  effectiveNysRate?: number;
+  effectiveNycRate?: number;
+}
+
+export interface TaxReturnInputs {
+  taxYear: number;
+  filingStatus: FilingStatus;
+  // Federal 1040 lines
+  federalAgi: number;          // Form 1040 Line 11
+  federalDeductions: number;   // Form 1040 Line 12
+  federalTaxableIncome: number;// Form 1040 Line 15
+  federalTotalTax: number;     // Form 1040 Line 24
+  hasNiit: boolean;            // Net Investment Income Tax (Form 8960, 3.8%)
+  // NY State & City IT-201 lines
+  nyAgi: number;               // Form IT-201 Line 33
+  nyDeductions: number;        // Form IT-196 Itemized Deductions
+  nyTaxableIncome: number;     // Form IT-201 Line 38
+  nysTax: number;              // Form IT-201 Line 46
+  nycTax: number;              // Form IT-201 Line 50
+  // Application Mode
+  rateModeToApply: 'marginal' | 'effective';
+}
+
+export interface TaxReturnAnalysis {
+  effectiveFederalRate: number;
+  marginalFederalRate: number;
+  effectiveNysRate: number;
+  marginalNysRate: number;
+  effectiveNycRate: number;
+  marginalNycRate: number;
+  effectiveCombinedRate: number;
+  marginalCombinedRate: number;
+  nyClawbackPct: number;
+  appliedProfile: TaxProfile;
 }
 
 export interface LoanConstants {

@@ -1,16 +1,16 @@
-// src/App.tsx
 import { useState, useMemo } from 'react';
 import { Header } from './components/Header';
 import { ModuleA_TaxShield } from './components/ModuleA_TaxShield';
 import { ModuleB_AmortizationRecast } from './components/ModuleB_AmortizationRecast';
 import { ModuleC_OpportunityCost } from './components/ModuleC_OpportunityCost';
 import { ModuleD_CemaRefinance } from './components/ModuleD_CemaRefinance';
+import { ModuleTaxReturn } from './components/ModuleTaxReturn';
 import { AuditValidationModal } from './components/AuditValidationModal';
 import { LockScreen } from './components/LockScreen';
-import { TAX_PROFILES } from './constants/financialData';
-import type { LumpSumStrategyMode, TaxProfile } from './types/financial';
-import { simulateAmortization } from './utils/financialCalculations';
-import { FileText } from 'lucide-react';
+import { TAX_PROFILES, DEFAULT_TAX_RETURN_INPUTS } from './constants/financialData';
+import type { LumpSumStrategyMode, TaxProfile, TaxReturnInputs } from './types/financial';
+import { simulateAmortization, calculateTaxReturnRates, formatPercent } from './utils/financialCalculations';
+import { FileText, Calculator } from 'lucide-react';
 
 export function App() {
   // Authentication State
@@ -21,13 +21,41 @@ export function App() {
     );
   });
 
+  // Tax Return Inputs & Persistence
+  const [taxReturnInputs, setTaxReturnInputs] = useState<TaxReturnInputs>(() => {
+    try {
+      const saved = localStorage.getItem('bergen_tax_return_inputs');
+      if (saved) {
+        return { ...DEFAULT_TAX_RETURN_INPUTS, ...JSON.parse(saved) };
+      }
+    } catch (e) {
+      console.error('Error loading stored tax return inputs', e);
+    }
+    return DEFAULT_TAX_RETURN_INPUTS;
+  });
+
   // Global Strategy & Financial State
   const [lumpSum, setLumpSum] = useState<number>(0);
   const [extraMonthly, setExtraMonthly] = useState<number>(0);
   const [strategyMode, setStrategyMode] = useState<LumpSumStrategyMode>('maintain_flat');
   const [stopAt750k, setStopAt750k] = useState<boolean>(false);
   const [resetRate, setResetRate] = useState<number>(0.1075); // 10.750% max first reset / lifetime cap
-  const [taxProfile, setTaxProfile] = useState<TaxProfile>(TAX_PROFILES.profile_b);
+
+  // Active Tax Profile (auto-calculated from stored tax return if available)
+  const [taxProfile, setTaxProfile] = useState<TaxProfile>(() => {
+    try {
+      const saved = localStorage.getItem('bergen_tax_return_inputs');
+      if (saved) {
+        const parsed: TaxReturnInputs = { ...DEFAULT_TAX_RETURN_INPUTS, ...JSON.parse(saved) };
+        const analysis = calculateTaxReturnRates(parsed);
+        return analysis.appliedProfile;
+      }
+    } catch (e) {
+      console.error('Error computing tax profile from storage', e);
+    }
+    return TAX_PROFILES.profile_b;
+  });
+
   const [activeTab, setActiveTab] = useState<string>('unified');
   const [isAuditModalOpen, setIsAuditModalOpen] = useState<boolean>(false);
 
@@ -53,11 +81,33 @@ export function App() {
     setStrategyMode(newStrategyMode);
   };
 
+  const handleSaveTaxReturnInputs = (newInputs: TaxReturnInputs) => {
+    setTaxReturnInputs(newInputs);
+    try {
+      localStorage.setItem('bergen_tax_return_inputs', JSON.stringify(newInputs));
+    } catch (e) {
+      console.error('Error saving tax return inputs to storage', e);
+    }
+    const analysis = calculateTaxReturnRates(newInputs);
+    setTaxProfile(analysis.appliedProfile);
+  };
+
+  const handleResetTaxProfile = () => {
+    try {
+      localStorage.removeItem('bergen_tax_return_inputs');
+    } catch (e) {
+      console.error('Error removing tax return inputs from storage', e);
+    }
+    setTaxReturnInputs(DEFAULT_TAX_RETURN_INPUTS);
+    setTaxProfile(TAX_PROFILES.profile_b);
+  };
+
   const handleLock = () => {
     localStorage.removeItem('bergen_arm_auth');
     sessionStorage.removeItem('bergen_arm_auth');
     setIsAuthenticated(false);
   };
+
 
   // If not authenticated, render password lock screen
   if (!isAuthenticated) {
@@ -72,25 +122,38 @@ export function App() {
         setActiveTab={setActiveTab}
         onOpenAuditModal={() => setIsAuditModalOpen(true)}
         onLock={handleLock}
+        isReturnDriven={Boolean(taxProfile.isReturnDriven)}
       />
 
       {/* Main Interactive Work Area */}
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-8">
         {/* Loan Context Briefing Bar */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between px-4 py-3 rounded-xl bg-slate-900/40 border border-white/5 text-xs text-slate-400 gap-2">
-          <div className="flex items-center space-x-2">
+          <div className="flex items-center space-x-2 flex-wrap">
             <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
             <span className="text-slate-300 font-medium">Audit Reference Model Active:</span>
             <span>Wells Fargo Loan #0813684933 (10/6m SOFR ARM)</span>
           </div>
-          <div className="flex items-center space-x-4">
+          <div className="flex items-center space-x-3 flex-wrap">
             <span>
-              Fixed Margin Floor: <strong className="text-slate-200">5.750%</strong> (107 mos to 09/2035)
+              Fixed Margin: <strong className="text-slate-200">5.750%</strong> (107 mos)
             </span>
             <span className="text-slate-600">•</span>
-            <span>
-              Caps: <strong className="text-slate-200">5/1/5 (10.750% Max)</strong>
-            </span>
+            <button
+              onClick={() => setActiveTab('moduleTax')}
+              className="flex items-center space-x-1.5 text-slate-300 hover:text-white transition-colors cursor-pointer group"
+              title="Click to calibrate from Form 1040 & IT-201"
+            >
+              <Calculator className="w-3.5 h-3.5 text-blue-400 group-hover:scale-110 transition-transform" />
+              <span>
+                Active Tax Rates:{' '}
+                <strong className={taxProfile.isReturnDriven ? 'text-emerald-400' : 'text-blue-300'}>
+                  {formatPercent(taxProfile.federalRate, 1)} Fed / {formatPercent(taxProfile.nysRate, 2)} NYS / {formatPercent(taxProfile.nycRate, 2)} NYC
+                </strong>{' '}
+                ({taxProfile.isReturnDriven ? 'Return-Driven' : 'Preset'})
+              </span>
+            </button>
+
           </div>
         </div>
 
@@ -178,7 +241,19 @@ export function App() {
 
         {/* Tab 5: Module D Focus */}
         {activeTab === 'moduleD' && <ModuleD_CemaRefinance />}
+
+        {/* Tab 6: Module Tax Return Intake & Calibration */}
+        {activeTab === 'moduleTax' && (
+          <ModuleTaxReturn
+            taxReturnInputs={taxReturnInputs}
+            onSaveInputs={handleSaveTaxReturnInputs}
+            activeTaxProfile={taxProfile}
+            onResetToBaseline={handleResetTaxProfile}
+            onNavigateToTab={setActiveTab}
+          />
+        )}
       </main>
+
 
       {/* Institutional Footer */}
       <footer className="border-t border-white/10 bg-[#090D15] mt-12 py-8 text-xs text-slate-500">

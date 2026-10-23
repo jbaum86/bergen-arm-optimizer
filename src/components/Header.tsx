@@ -1,4 +1,3 @@
-// src/components/Header.tsx
 import {
   Building2,
   FileCheck2,
@@ -7,6 +6,7 @@ import {
   TrendingUp,
   Landmark,
   Layers,
+  Calculator,
 } from 'lucide-react';
 import { BASELINE_LOAN } from '../constants/financialData';
 import { formatCurrency } from '../utils/financialCalculations';
@@ -16,6 +16,7 @@ interface HeaderProps {
   setActiveTab: (tab: string) => void;
   onOpenAuditModal: () => void;
   onLock: () => void;
+  isReturnDriven?: boolean;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -23,6 +24,7 @@ export const Header: React.FC<HeaderProps> = ({
   setActiveTab,
   onOpenAuditModal,
   onLock,
+  isReturnDriven,
 }) => {
   const tabs = [
     { id: 'unified', label: 'Command Center', icon: Layers },
@@ -30,7 +32,9 @@ export const Header: React.FC<HeaderProps> = ({
     { id: 'moduleB', label: 'Recast & Reset Stress-Test', icon: Sliders },
     { id: 'moduleC', label: 'Alternative Opportunity Cost', icon: TrendingUp },
     { id: 'moduleD', label: 'NYC CEMA & Relationship Refi', icon: Landmark },
+    { id: 'moduleTax', label: 'Tax Return & Rate Engine', icon: Calculator, badge: isReturnDriven },
   ];
+
 
   return (
     <header className="border-b border-white/10 bg-[#0B0F19]/90 backdrop-blur-xl sticky top-0 z-40">
@@ -96,7 +100,7 @@ export const Header: React.FC<HeaderProps> = ({
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
-                className={`flex items-center space-x-2 px-3.5 py-2 rounded-lg text-xs sm:text-sm font-medium transition-all whitespace-nowrap cursor-pointer ${
+                className={`flex items-center space-x-2 px-3.5 py-2 rounded-lg text-xs sm:text-sm font-medium transition-all whitespace-nowrap cursor-pointer relative ${
                   isActive
                     ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/30 font-semibold'
                     : 'text-slate-400 hover:text-slate-200 hover:bg-white/5'
@@ -104,7 +108,14 @@ export const Header: React.FC<HeaderProps> = ({
               >
                 <Icon className={`w-4 h-4 ${isActive ? 'text-white' : 'text-slate-400'}`} />
                 <span>{tab.label}</span>
+                {tab.badge && (
+                  <span
+                    title="Active tax return numbers powering model"
+                    className="w-2 h-2 rounded-full bg-emerald-400 ring-2 ring-emerald-400/30 animate-pulse ml-0.5"
+                  />
+                )}
               </button>
+
             );
           })}
         </div>
