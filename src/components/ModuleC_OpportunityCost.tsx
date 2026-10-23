@@ -1,10 +1,12 @@
-// src/components/ModuleC_OpportunityCost.tsx
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   Percent,
   Sliders,
   Award,
   CheckCircle2,
+  TrendingUp,
+  Sparkles,
+  Info,
 } from 'lucide-react';
 
 import {
@@ -16,12 +18,13 @@ import {
   Tooltip,
   Cell,
 } from 'recharts';
-import type { TaxProfile, AssetBenchmark } from '../types/financial';
-import { TAX_PROFILES } from '../constants/financialData';
+import type { TaxProfile, AssetBenchmark, TaxReturnInputs } from '../types/financial';
+import { DEFAULT_TAX_RETURN_INPUTS } from '../constants/financialData';
 import {
   formatCurrency,
   formatPercent,
   calculateAlternativeAssets,
+  generateCompGrowthProfiles,
 } from '../utils/financialCalculations';
 
 interface ModuleCProps {
@@ -29,6 +32,7 @@ interface ModuleCProps {
   setTaxProfile: (profile: TaxProfile) => void;
   lumpSum: number;
   extraMonthly: number;
+  taxReturnInputs?: TaxReturnInputs;
 }
 
 export const ModuleC_OpportunityCost: React.FC<ModuleCProps> = ({
@@ -36,22 +40,62 @@ export const ModuleC_OpportunityCost: React.FC<ModuleCProps> = ({
   setTaxProfile,
   lumpSum,
   extraMonthly,
+  taxReturnInputs,
 }) => {
   const [showCustomSliders, setShowCustomSliders] = useState(false);
   const [showVolatilityBands, setShowVolatilityBands] = useState(true);
+
+  const effectiveInputs = taxReturnInputs || DEFAULT_TAX_RETURN_INPUTS;
+
+  // Generate the 3 compensation growth profiles:
+  // 1. Profile A: Baseline (Tax Return Driven, 0% Comp Growth)
+  // 2. Profile B: Moderate Comp Growth (+7.5%/yr)
+  // 3. Profile C: Aggressive Comp Growth (+15.0%/yr)
+  const growthProfiles = useMemo(() => {
+    return generateCompGrowthProfiles(effectiveInputs, taxProfile);
+  }, [effectiveInputs, taxProfile]);
 
   // Fallback defaults if zero curtailment selected, for realistic benchmark comparison
   const effectiveLump = lumpSum > 0 ? lumpSum : 90532.21;
   const effectiveMonthly = extraMonthly > 0 ? extraMonthly : 1000;
 
-  // Calculate benchmarks
-  const benchmarks: AssetBenchmark[] = React.useMemo(() => {
+  // Calculate benchmarks for currently active profile
+  const benchmarks: AssetBenchmark[] = useMemo(() => {
     return calculateAlternativeAssets({
       lumpSum: effectiveLump,
       monthlyCashFlow: effectiveMonthly,
       taxProfile,
     });
   }, [effectiveLump, effectiveMonthly, taxProfile]);
+
+  // Calculate benchmarks across all 3 profiles for trajectory comparison matrix
+  const matrixData = useMemo(() => {
+    const list = [growthProfiles.profile_a, growthProfiles.profile_b, growthProfiles.profile_c];
+    return list.map((prof) => {
+      const bm = calculateAlternativeAssets({
+        lumpSum: effectiveLump,
+        monthlyCashFlow: effectiveMonthly,
+        taxProfile: prof,
+      });
+      const hysa = bm.find((x) => x.id === 'hysa_cash');
+      const nyMuni = bm.find((x) => x.id === 'ny_muni_bond');
+      const mortgage = bm.find((x) => x.id === 'mortgage_paydown');
+      const combinedMarginal = prof.federalRate + prof.nysRate + prof.nycRate + prof.niitRate;
+      const hurdleRate = 0.0575 / (1 - combinedMarginal);
+      const muniTaxableEquiv = nyMuni ? nyMuni.preTaxYield / (1 - (prof.federalRate + prof.nysRate + prof.nycRate)) : 0;
+
+      return {
+        profile: prof,
+        combinedMarginal,
+        hurdleRate,
+        hysaAfterTax: hysa ? hysa.afterTaxYield : 0,
+        muniTaxableEquiv,
+        mortgageTerminal: mortgage ? mortgage.terminalValue107Mo : 0,
+        hysaTerminal: hysa ? hysa.terminalValue107Mo : 0,
+        nyMuniTerminal: nyMuni ? nyMuni.terminalValue107Mo : 0,
+      };
+    });
+  }, [growthProfiles, effectiveLump, effectiveMonthly]);
 
   // Chart data
   const chartData = benchmarks.map((b) => ({
@@ -82,71 +126,97 @@ export const ModuleC_OpportunityCost: React.FC<ModuleCProps> = ({
 
   return (
     <div className="space-y-6">
-      {/* Tax Profile Selector & Custom Controls */}
-      <div className="glass-panel rounded-2xl p-5 sm:p-6 space-y-4">
+      {/* Top Section: Compensation & Tax Profile Selector */}
+      <div className="glass-panel rounded-2xl p-5 sm:p-6 space-y-5 border border-white/10">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between border-b border-white/10 pb-4 gap-2">
           <div className="flex items-center space-x-2.5">
             <Percent className="w-5 h-5 text-purple-400" />
-            <h2 className="text-base sm:text-lg font-bold text-white">
-              NYC Tax Profile & Statutory Hurdle Rate Matrix
-            </h2>
+            <div>
+              <h2 className="text-base sm:text-lg font-bold text-white">
+                Alternative Opportunity Cost & Compensation Trajectory Profiles
+              </h2>
+              <p className="text-xs text-slate-400 mt-0.5">
+                Model how annual compensation growth shifts your statutory tax brackets and widens the hurdle rate to beat mortgage curtailment.
+              </p>
+            </div>
           </div>
           <button
             onClick={() => setShowCustomSliders(!showCustomSliders)}
             className="flex items-center space-x-1.5 text-xs text-blue-400 hover:text-blue-300 transition-colors cursor-pointer self-start sm:self-auto"
           >
             <Sliders className="w-3.5 h-3.5" />
-            <span>{showCustomSliders ? 'Hide Custom Sliders' : 'Fine-Tune Tax Sliders'}</span>
+            <span>{showCustomSliders ? 'Hide Custom Sliders' : 'Fine-Tune Sliders'}</span>
           </button>
         </div>
 
-        {/* Profiles Grid */}
-        <div className={`grid grid-cols-1 ${taxProfile.isReturnDriven ? 'md:grid-cols-4' : 'md:grid-cols-3'} gap-3`}>
-          {taxProfile.isReturnDriven && (
-            <div className="p-4 rounded-xl border border-emerald-500/60 bg-emerald-500/10 shadow-lg shadow-emerald-950/40 ring-1 ring-emerald-500/50 text-left">
-              <div className="flex items-center justify-between mb-1.5">
-                <span className="text-xs font-bold text-white flex items-center space-x-1.5">
-                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
-                  <span>{taxProfile.name}</span>
-                </span>
-                <span className="text-[10px] uppercase font-mono px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 font-bold">
-                  Active Return
-                </span>
-              </div>
-              <div className="text-[11px] text-emerald-200/90 leading-relaxed font-mono">
-                {taxProfile.description}
-              </div>
-            </div>
-          )}
-
-          {Object.values(TAX_PROFILES).map((p) => {
-            const isSelected = !taxProfile.isReturnDriven && taxProfile.id === p.id;
+        {/* 3 Redefined Compensation Growth Profiles */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3.5">
+          {Object.values(growthProfiles).map((p) => {
+            const isSelected = taxProfile.id === p.id;
             return (
               <button
                 key={p.id}
                 onClick={() => setTaxProfile(p)}
-                className={`p-4 rounded-xl border text-left transition-all cursor-pointer ${
+                className={`p-4 rounded-xl border text-left transition-all cursor-pointer relative group flex flex-col justify-between ${
                   isSelected
-                    ? 'bg-purple-600/20 border-purple-500 shadow-md ring-1 ring-purple-500/50'
-                    : 'bg-white/[0.02] border-white/5 hover:border-white/15 text-slate-300'
+                    ? 'bg-purple-600/20 border-purple-500 shadow-lg shadow-purple-950/50 ring-1 ring-purple-500/50'
+                    : 'bg-white/[0.02] border-white/5 hover:border-white/20 text-slate-300'
                 }`}
               >
-                <div className="flex items-center justify-between mb-1.5">
-                  <span className="text-xs font-bold text-white">{p.name}</span>
-                  {p.id === 'profile_b' && (
-                    <span className="text-[10px] uppercase font-mono px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-300 font-semibold">
-                      Audit Baseline
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-xs font-bold text-white flex items-center space-x-1.5">
+                      {isSelected ? (
+                        <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                      ) : (
+                        <TrendingUp className="w-4 h-4 text-slate-400 shrink-0" />
+                      )}
+                      <span>{p.name}</span>
                     </span>
-                  )}
+                    <span
+                      className={`text-[10px] uppercase font-mono px-2 py-0.5 rounded font-bold ${
+                        p.id === 'profile_a'
+                          ? 'bg-blue-500/20 text-blue-300'
+                          : p.id === 'profile_b'
+                          ? 'bg-amber-500/20 text-amber-300'
+                          : 'bg-rose-500/20 text-rose-300'
+                      }`}
+                    >
+                      {p.compGrowthAnnualPct === 0
+                        ? '0% Growth'
+                        : `+${(p.compGrowthAnnualPct! * 100).toFixed(1)}%/yr`}
+                    </span>
+                  </div>
+
+                  <div className="space-y-1 text-xs">
+                    <div className="flex items-baseline justify-between text-slate-300">
+                      <span className="text-slate-400">Combined Marginal Drag:</span>
+                      <strong className="font-mono text-white text-sm">
+                        {formatPercent(p.federalRate + p.nysRate + p.nycRate + p.niitRate, 2)}
+                      </strong>
+                    </div>
+                    {p.rateDeltaCombined !== undefined && p.rateDeltaCombined > 0 && (
+                      <div className="flex items-baseline justify-between text-[11px] text-amber-400 font-mono">
+                        <span>Tax Drag Increase vs Base:</span>
+                        <strong>+{formatPercent(p.rateDeltaCombined, 2)}</strong>
+                      </div>
+                    )}
+                    <div className="flex items-baseline justify-between text-[11px] text-slate-400 font-mono pt-1">
+                      <span>Projected 2035 AGI:</span>
+                      <strong className="text-slate-200">
+                        {formatCurrency(p.projectedYear9Agi || 550000, 0)}
+                      </strong>
+                    </div>
+                  </div>
                 </div>
-                <div className="text-[11px] text-slate-400 leading-relaxed font-mono">
-                  {p.description}
+
+                <div className="mt-3 pt-2.5 border-t border-white/5 text-[11px] text-slate-400 leading-relaxed font-sans">
+                  {p.bracketNote}
                 </div>
               </button>
             );
           })}
         </div>
-
 
         {/* Fine-Tuning Sliders (Collapsible) */}
         {showCustomSliders && (
@@ -218,8 +288,198 @@ export const ModuleC_OpportunityCost: React.FC<ModuleCProps> = ({
         )}
       </div>
 
+      {/* NEW: Side-by-Side Compensation Growth & Tax Rate Trajectory Matrix */}
+      <div className="glass-panel rounded-2xl p-5 sm:p-6 space-y-4 border border-white/10">
+        <div className="flex items-center justify-between border-b border-white/10 pb-3">
+          <div className="flex items-center space-x-2.5">
+            <Sparkles className="w-5 h-5 text-amber-400" />
+            <div>
+              <h3 className="text-base font-bold text-white">
+                Tax Rate Shift & Hurdle Rate Trajectory Matrix (Side-by-Side Impact)
+              </h3>
+              <p className="text-xs text-slate-400">
+                Shows the mathematical impact of compensation growth on statutory tax brackets and alternative asset hurdle rates.
+              </p>
+            </div>
+          </div>
+          <span className="text-xs text-slate-400 font-mono hidden sm:inline">
+            Active: <strong className="text-purple-300">{taxProfile.name.split(':')[0]}</strong>
+          </span>
+        </div>
+
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-xs">
+            <thead>
+              <tr className="border-b border-white/10 text-slate-400 uppercase tracking-wider text-[11px]">
+                <th className="py-2.5 px-3">Metric / Parameter</th>
+                <th className="py-2.5 px-3 text-center bg-blue-500/5 text-blue-300 font-bold">
+                  Profile A: Baseline (0% Growth)
+                </th>
+                <th className="py-2.5 px-3 text-center bg-amber-500/5 text-amber-300 font-bold">
+                  Profile B: Moderate (+7.5%/yr)
+                </th>
+                <th className="py-2.5 px-3 text-center bg-rose-500/5 text-rose-300 font-bold">
+                  Profile C: Aggressive (+15.0%/yr)
+                </th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-white/5 font-mono">
+              {/* Row 1: Comp Growth Rate */}
+              <tr>
+                <td className="py-2.5 px-3 font-sans text-slate-300 font-medium">Annual Comp Growth Rate</td>
+                <td className="py-2.5 px-3 text-center text-slate-200">0.0% (Constant)</td>
+                <td className="py-2.5 px-3 text-center text-amber-300 font-bold">+7.5% per year</td>
+                <td className="py-2.5 px-3 text-center text-rose-300 font-bold">+15.0% per year</td>
+              </tr>
+
+              {/* Row 2: Projected Year 9 AGI */}
+              <tr>
+                <td className="py-2.5 px-3 font-sans text-slate-300 font-medium">Projected 2035 Reset AGI</td>
+                <td className="py-2.5 px-3 text-center text-slate-200">
+                  {formatCurrency(matrixData[0].profile.projectedYear9Agi || 550000, 0)}
+                </td>
+                <td className="py-2.5 px-3 text-center text-amber-300 font-bold">
+                  {formatCurrency(matrixData[1].profile.projectedYear9Agi || 1048642, 0)}
+                </td>
+                <td className="py-2.5 px-3 text-center text-rose-300 font-bold">
+                  {formatCurrency(matrixData[2].profile.projectedYear9Agi || 1929885, 0)}
+                </td>
+              </tr>
+
+              {/* Row 3: Federal Marginal Bracket */}
+              <tr>
+                <td className="py-2.5 px-3 font-sans text-slate-300 font-medium">Federal Marginal Bracket</td>
+                <td className="py-2.5 px-3 text-center text-slate-200">
+                  {formatPercent(matrixData[0].profile.federalRate, 1)}
+                </td>
+                <td className="py-2.5 px-3 text-center text-amber-300 font-bold">
+                  {formatPercent(matrixData[1].profile.federalRate, 1)}{' '}
+                  <span className="text-[10px] text-amber-400 font-sans">(+2.0% top tier)</span>
+                </td>
+                <td className="py-2.5 px-3 text-center text-rose-300 font-bold">
+                  {formatPercent(matrixData[2].profile.federalRate, 1)}{' '}
+                  <span className="text-[10px] text-rose-400 font-sans">(37% in Yr 1)</span>
+                </td>
+              </tr>
+
+              {/* Row 4: NY State Marginal Bracket */}
+              <tr>
+                <td className="py-2.5 px-3 font-sans text-slate-300 font-medium">NY State Marginal Bracket</td>
+                <td className="py-2.5 px-3 text-center text-slate-200">
+                  {formatPercent(matrixData[0].profile.nysRate, 2)}
+                </td>
+                <td className="py-2.5 px-3 text-center text-amber-300 font-bold">
+                  {formatPercent(matrixData[1].profile.nysRate, 2)}{' '}
+                  <span className="text-[10px] text-amber-400 font-sans">(+2.80% jump)</span>
+                </td>
+                <td className="py-2.5 px-3 text-center text-rose-300 font-bold">
+                  {formatPercent(matrixData[2].profile.nysRate, 2)}{' '}
+                  <span className="text-[10px] text-rose-400 font-sans">(+3.45% $1M+ surtax)</span>
+                </td>
+              </tr>
+
+              {/* Row 5: NY §615 Itemized Clawback */}
+              <tr>
+                <td className="py-2.5 px-3 font-sans text-slate-300 font-medium">NY IT-196 Mortgage Clawback</td>
+                <td className="py-2.5 px-3 text-center text-slate-300">
+                  {formatPercent(matrixData[0].profile.nyClawbackPct, 0)} (Partial Shield)
+                </td>
+                <td className="py-2.5 px-3 text-center text-red-400 font-bold">
+                  100% (Full Phaseout)
+                </td>
+                <td className="py-2.5 px-3 text-center text-red-400 font-bold">
+                  100% (Full Phaseout)
+                </td>
+              </tr>
+
+              {/* Row 6: Combined Marginal Tax Drag */}
+              <tr className="bg-white/[0.02]">
+                <td className="py-2.5 px-3 font-sans text-white font-bold">Combined Marginal Tax Drag</td>
+                <td className="py-2.5 px-3 text-center font-bold text-blue-300 text-sm">
+                  {formatPercent(matrixData[0].combinedMarginal, 2)}
+                </td>
+                <td className="py-2.5 px-3 text-center font-bold text-amber-300 text-sm">
+                  {formatPercent(matrixData[1].combinedMarginal, 2)}{' '}
+                  <span className="text-xs font-semibold text-amber-400 font-sans">(+4.80%)</span>
+                </td>
+                <td className="py-2.5 px-3 text-center font-bold text-rose-300 text-sm">
+                  {formatPercent(matrixData[2].combinedMarginal, 2)}{' '}
+                  <span className="text-xs font-semibold text-rose-400 font-sans">(+5.45%)</span>
+                </td>
+              </tr>
+
+              {/* Row 7: 5.75% Mortgage Hurdle Rate */}
+              <tr className="bg-blue-600/10">
+                <td className="py-3 px-3 font-sans text-white font-bold">
+                  Hurdle Rate Needed to Beat 5.75% Mortgage Paydown
+                </td>
+                <td className="py-3 px-3 text-center font-bold text-white text-sm">
+                  {formatPercent(matrixData[0].hurdleRate, 2)}
+                </td>
+                <td className="py-3 px-3 text-center font-bold text-amber-300 text-sm">
+                  {formatPercent(matrixData[1].hurdleRate, 2)}{' '}
+                  <span className="text-xs font-semibold text-amber-400 font-sans">(+119 bps)</span>
+                </td>
+                <td className="py-3 px-3 text-center font-bold text-rose-300 text-sm">
+                  {formatPercent(matrixData[2].hurdleRate, 2)}{' '}
+                  <span className="text-xs font-semibold text-rose-400 font-sans">(+139 bps)</span>
+                </td>
+              </tr>
+
+              {/* Row 8: 4.75% HYSA Cash After-Tax Yield */}
+              <tr>
+                <td className="py-2.5 px-3 font-sans text-slate-300 font-medium">4.75% HYSA Cash After-Tax Net Yield</td>
+                <td className="py-2.5 px-3 text-center text-slate-200">
+                  {formatPercent(matrixData[0].hysaAfterTax, 2)}
+                </td>
+                <td className="py-2.5 px-3 text-center text-amber-400">
+                  {formatPercent(matrixData[1].hysaAfterTax, 2)}{' '}
+                  <span className="text-[10px] text-slate-400 font-sans">(-23 bps erosion)</span>
+                </td>
+                <td className="py-2.5 px-3 text-center text-rose-400">
+                  {formatPercent(matrixData[2].hysaAfterTax, 2)}{' '}
+                  <span className="text-[10px] text-slate-400 font-sans">(-26 bps erosion)</span>
+                </td>
+              </tr>
+
+              {/* Row 9: 4.10% NY Muni Bond Tax-Equivalent Yield */}
+              <tr>
+                <td className="py-2.5 px-3 font-sans text-slate-300 font-medium">4.10% NY Muni Tax-Equivalent Yield</td>
+                <td className="py-2.5 px-3 text-center text-emerald-400 font-semibold">
+                  {formatPercent(matrixData[0].muniTaxableEquiv, 2)}
+                </td>
+                <td className="py-2.5 px-3 text-center text-emerald-300 font-bold">
+                  {formatPercent(matrixData[1].muniTaxableEquiv, 2)}{' '}
+                  <span className="text-[10px] text-emerald-400 font-sans">(+74 bps)</span>
+                </td>
+                <td className="py-2.5 px-3 text-center text-emerald-300 font-bold">
+                  {formatPercent(matrixData[2].muniTaxableEquiv, 2)}{' '}
+                  <span className="text-[10px] text-emerald-400 font-sans">(+85 bps)</span>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        {/* Strategic Takeaway Banner */}
+        <div className="p-4 rounded-xl bg-purple-950/30 border border-purple-500/20 text-xs text-purple-200/90 leading-relaxed flex items-start space-x-3">
+          <Info className="w-5 h-5 text-purple-400 shrink-0 mt-0.5" />
+          <div className="space-y-1">
+            <span className="font-semibold text-white block">
+              Strategic Implication of Compensation Growth on Capital Allocation:
+            </span>
+            <p>
+              As your income compounds (+7.5% to +15.0% annually), federal and NY state bracket jumps
+              increase your combined marginal tax burden from <strong>49.53% to ~55.0%</strong>. This causes
+              severe tax drag on ordinary income from HYSA cash and taxable bonds, raising the pre-tax hurdle rate required to beat mortgage paydown from <strong>11.39% to nearly 12.80%</strong>.
+              Consequently, <strong>retiring unshielded 5.75% mortgage principal</strong> (a guaranteed, non-taxable return) and allocating to <strong>triple tax-free NY Municipal Bonds</strong> become mathematically superior wealth-preservation moves as compensation grows.
+            </p>
+          </div>
+        </div>
+      </div>
+
       {/* Asset Class Benchmark Table */}
-      <div className="glass-panel rounded-2xl p-5 sm:p-6 space-y-4">
+      <div className="glass-panel rounded-2xl p-5 sm:p-6 space-y-4 border border-white/10">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
           <div>
             <h2 className="text-base sm:text-lg font-bold text-white flex items-center space-x-2">
@@ -229,7 +489,7 @@ export const ModuleC_OpportunityCost: React.FC<ModuleCProps> = ({
               </span>
             </h2>
             <p className="text-xs text-slate-400 mt-0.5">
-              Comparative after-tax yields and required pre-tax hurdle rates to beat paying down unshielded 5.75% mortgage debt.
+              Reflecting active tax rates: <strong className="text-purple-300">{taxProfile.name}</strong> ({formatPercent(taxProfile.federalRate + taxProfile.nysRate + taxProfile.nycRate + taxProfile.niitRate, 2)} combined tax drag).
             </p>
           </div>
 
@@ -292,7 +552,15 @@ export const ModuleC_OpportunityCost: React.FC<ModuleCProps> = ({
                       )}
                     </td>
                     <td className="py-3 px-3 text-right font-mono font-bold">
-                      <span className={isMortgage ? 'text-blue-400' : b.afterTaxYield >= 0.0575 ? 'text-emerald-400' : 'text-amber-400'}>
+                      <span
+                        className={
+                          isMortgage
+                            ? 'text-blue-400'
+                            : b.afterTaxYield >= 0.0575
+                            ? 'text-emerald-400'
+                            : 'text-amber-400'
+                        }
+                      >
                         {formatPercent(b.afterTaxYield, 2)}
                       </span>
                     </td>
@@ -322,14 +590,14 @@ export const ModuleC_OpportunityCost: React.FC<ModuleCProps> = ({
       </div>
 
       {/* Terminal Wealth Comparison Chart */}
-      <div className="glass-panel rounded-2xl p-5 sm:p-6 space-y-4">
+      <div className="glass-panel rounded-2xl p-5 sm:p-6 space-y-4 border border-white/10">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
           <div>
             <h2 className="text-base font-bold text-white">
               107-Month Horizon Terminal Wealth Accumulation (09/01/2035)
             </h2>
             <p className="text-xs text-slate-400">
-              Comparing after-tax net wealth of {formatCurrency(effectiveLump)} initial capital + {formatCurrency(effectiveMonthly)}/mo across instruments.
+              Comparing after-tax net wealth of {formatCurrency(effectiveLump)} initial capital + {formatCurrency(effectiveMonthly)}/mo under {taxProfile.name}.
             </p>
           </div>
           <span className="text-xs text-emerald-400 font-mono">

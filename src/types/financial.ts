@@ -18,7 +18,12 @@ export interface TaxProfile {
   effectiveFederalRate?: number;
   effectiveNysRate?: number;
   effectiveNycRate?: number;
+  compGrowthAnnualPct?: number; // e.g. 0, 0.075, 0.15
+  projectedYear9Agi?: number;   // Projected AGI in month 107
+  rateDeltaCombined?: number;   // Combined marginal tax rate change vs Baseline
+  bracketNote?: string;
 }
+
 
 export interface TaxReturnInputs {
   taxYear: number;

@@ -53,7 +53,7 @@ export function App() {
     } catch (e) {
       console.error('Error computing tax profile from storage', e);
     }
-    return TAX_PROFILES.profile_b;
+    return TAX_PROFILES.profile_a;
   });
 
   const [activeTab, setActiveTab] = useState<string>('unified');
@@ -99,8 +99,9 @@ export function App() {
       console.error('Error removing tax return inputs from storage', e);
     }
     setTaxReturnInputs(DEFAULT_TAX_RETURN_INPUTS);
-    setTaxProfile(TAX_PROFILES.profile_b);
+    setTaxProfile(TAX_PROFILES.profile_a);
   };
+
 
   const handleLock = () => {
     localStorage.removeItem('bergen_arm_auth');
@@ -192,6 +193,7 @@ export function App() {
                 setTaxProfile={setTaxProfile}
                 lumpSum={lumpSum}
                 extraMonthly={extraMonthly}
+                taxReturnInputs={taxReturnInputs}
               />
             </section>
 
@@ -236,8 +238,10 @@ export function App() {
             setTaxProfile={setTaxProfile}
             lumpSum={lumpSum}
             extraMonthly={extraMonthly}
+            taxReturnInputs={taxReturnInputs}
           />
         )}
+
 
         {/* Tab 5: Module D Focus */}
         {activeTab === 'moduleD' && <ModuleD_CemaRefinance />}

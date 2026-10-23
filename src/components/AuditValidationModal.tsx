@@ -21,7 +21,7 @@ export const AuditValidationModal: React.FC<AuditModalProps> = ({
 }) => {
   if (!isOpen) return null;
 
-  const defaultProfile = TAX_PROFILES.profile_b;
+  const defaultProfile = TAX_PROFILES.profile_a;
 
   // Run live simulations for all 4 checkpoints to verify live code matches audit
   // 1. Baseline

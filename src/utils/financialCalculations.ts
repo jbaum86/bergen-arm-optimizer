@@ -629,3 +629,90 @@ export function calculateTaxReturnRates(inputs: TaxReturnInputs): TaxReturnAnaly
   };
 }
 
+/**
+ * Generate Compensation Growth Trajectory Profiles (Profile A Baseline, Profile B +7.5%/yr, Profile C +15%/yr)
+ */
+export function generateCompGrowthProfiles(
+  baseInputs: TaxReturnInputs,
+  activeReturnProfile: TaxProfile
+): Record<string, TaxProfile> {
+  const baseAgi = baseInputs.federalAgi > 0 ? baseInputs.federalAgi : 550000;
+  const filingStatus = baseInputs.filingStatus;
+  const isJoint = filingStatus === 'married_joint';
+
+  // Profile A: Baseline using tax rates from the new tax rate section
+  const profileA: TaxProfile = {
+    ...activeReturnProfile,
+    id: 'profile_a',
+    name: 'Profile A: Baseline (Tax Return)',
+    description: `Current Return: ${(activeReturnProfile.federalRate * 100).toFixed(1)}% Fed / ${(activeReturnProfile.nysRate * 100).toFixed(2)}% NYS / ${(activeReturnProfile.nycRate * 100).toFixed(3)}% NYC (0% Comp Growth Baseline)`,
+    compGrowthAnnualPct: 0.0,
+    projectedYear9Agi: Math.round(baseAgi),
+    rateDeltaCombined: 0.0,
+    bracketNote: `Baseline tax rates directly calibrated from Form 1040 & IT-201 at constant earnings (${formatCurrency(baseAgi, 0)} AGI).`,
+  };
+
+  const baseCombined =
+    profileA.federalRate + profileA.nysRate + profileA.nycRate + profileA.niitRate;
+
+  // Profile B: Moderate Comp Growth (7.5% per year over 107 months / 8.917 years)
+  const projAgiB = baseAgi * Math.pow(1 + 0.075, 107 / 12);
+  const deductionRatio = baseAgi > 0 ? Math.min(0.3, baseInputs.federalDeductions / baseAgi) : 0.12;
+  const projFedTaxableB = Math.max(0, projAgiB * (1 - deductionRatio));
+  const projNyTaxableB = Math.max(0, projAgiB * (1 - deductionRatio));
+  const ratesB = getStatutoryMarginalRates(projFedTaxableB, projNyTaxableB, filingStatus);
+  const clawbackB = calculateNyClawbackPct(projAgiB);
+  const niitB = projAgiB > (isJoint ? 250000 : 200000) ? 0.038 : 0.0;
+  const ltcgB = projFedTaxableB > (isJoint ? 583750 : 518900) ? 0.20 : 0.15;
+  const combinedB = ratesB.marginalFederal + ratesB.marginalNys + ratesB.marginalNyc + niitB;
+
+  const profileB: TaxProfile = {
+    id: 'profile_b',
+    name: 'Profile B: Moderate Comp Growth (+7.5%/yr)',
+    description: `${(ratesB.marginalFederal * 100).toFixed(1)}% Fed / ${(ratesB.marginalNys * 100).toFixed(2)}% NYS / ${(ratesB.marginalNyc * 100).toFixed(3)}% NYC (${(clawbackB * 100).toFixed(0)}% NY Clawback, ${formatCurrency(projAgiB, 0)} Projected AGI)`,
+    federalRate: ratesB.marginalFederal,
+    nysRate: ratesB.marginalNys,
+    nycRate: ratesB.marginalNyc,
+    niitRate: niitB,
+    ltcgRate: ltcgB,
+    nyClawbackPct: clawbackB,
+    compGrowthAnnualPct: 0.075,
+    projectedYear9Agi: Math.round(projAgiB),
+    rateDeltaCombined: combinedB - baseCombined,
+    bracketNote: `Compounding at 7.5%/yr reaches ${formatCurrency(projAgiB, 0)} by 2035 reset: jumps into Federal ${(ratesB.marginalFederal * 100).toFixed(1)}% and NYS ${(ratesB.marginalNys * 100).toFixed(2)}% brackets (${(clawbackB * 100).toFixed(0)}% NY deduction clawback).`,
+  };
+
+  // Profile C: Aggressive Comp Growth (15.0% per year over 107 months / 8.917 years)
+  const projAgiC = baseAgi * Math.pow(1 + 0.15, 107 / 12);
+  const projFedTaxableC = Math.max(0, projAgiC * (1 - deductionRatio));
+  const projNyTaxableC = Math.max(0, projAgiC * (1 - deductionRatio));
+  const ratesC = getStatutoryMarginalRates(projFedTaxableC, projNyTaxableC, filingStatus);
+  const clawbackC = calculateNyClawbackPct(projAgiC);
+  const niitC = projAgiC > (isJoint ? 250000 : 200000) ? 0.038 : 0.0;
+  const ltcgC = 0.20;
+  const combinedC = ratesC.marginalFederal + ratesC.marginalNys + ratesC.marginalNyc + niitC;
+
+  const profileC: TaxProfile = {
+    id: 'profile_c',
+    name: 'Profile C: Aggressive Comp Growth (+15.0%/yr)',
+    description: `${(ratesC.marginalFederal * 100).toFixed(1)}% Fed / ${(ratesC.marginalNys * 100).toFixed(2)}% NYS / ${(ratesC.marginalNyc * 100).toFixed(3)}% NYC (${(clawbackC * 100).toFixed(0)}% NY Clawback, ${formatCurrency(projAgiC, 0)} Projected AGI)`,
+    federalRate: ratesC.marginalFederal,
+    nysRate: ratesC.marginalNys,
+    nycRate: ratesC.marginalNyc,
+    niitRate: niitC,
+    ltcgRate: ltcgC,
+    nyClawbackPct: clawbackC,
+    compGrowthAnnualPct: 0.15,
+    projectedYear9Agi: Math.round(projAgiC),
+    rateDeltaCombined: combinedC - baseCombined,
+    bracketNote: `Compounding at 15.0%/yr reaches ${formatCurrency(projAgiC, 0)} by 2035 reset: triggers top ${(ratesC.marginalFederal * 100).toFixed(1)}% Federal, ${(ratesC.marginalNys * 100).toFixed(2)}% NYS, 20% LTCG, and 100% deduction clawback.`,
+  };
+
+  return {
+    profile_a: profileA,
+    profile_b: profileB,
+    profile_c: profileC,
+  };
+}
+
+
