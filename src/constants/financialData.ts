@@ -1,12 +1,12 @@
 import type { LoanConstants, TaxProfile, TaxReturnInputs } from '../types/financial';
 
 export const BASELINE_LOAN: LoanConstants = {
-  propertyAddress: '323 Bergen St Apt 408W, Brooklyn, NY 11217',
+  propertyAddress: '323 Bergen St, Brooklyn, NY 11217',
   propertyType: 'Kings County 1-Bed Condo (775 sq ft)',
   purchasePrice: 1390000.0,
   originalLoanDate: '2025-09-01',
   originalBalance: 1106000.0,
-  loanNumber: '0813684933',
+  loanNumber: '',
   borrowerName: 'Primary Borrower',
   statementBalance: 1091755.20,
 

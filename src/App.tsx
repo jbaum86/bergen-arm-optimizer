@@ -133,7 +133,7 @@ export function App() {
           <div className="flex items-center space-x-2 flex-wrap">
             <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
             <span className="text-slate-300 font-medium">Audit Reference Model Active:</span>
-            <span>Wells Fargo Loan #0813684933 (10/6m SOFR ARM)</span>
+            <span>Wells Fargo 10/6m SOFR ARM</span>
           </div>
           <div className="flex items-center space-x-3 flex-wrap">
             <span>
@@ -259,7 +259,7 @@ export function App() {
                 Bergen Street Jumbo ARM & Capital Allocation Optimizer
               </div>
               <div className="text-[11px] text-slate-400 mt-0.5">
-                Property: 323 Bergen St Apt 408W, Brooklyn, NY 11217 • Primary Borrower (Wells Fargo Loan #0813684933)
+                Property: 323 Bergen St, Brooklyn, NY 11217 • Primary Borrower
               </div>
             </div>
 

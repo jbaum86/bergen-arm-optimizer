@@ -156,7 +156,7 @@ export const LockScreen: React.FC<LockScreenProps> = ({ onUnlock }) => {
                 />
                 <span>Remember this device</span>
               </label>
-              <span className="text-[10px] text-slate-500">Loan #0813684933</span>
+              <span className="text-[10px] text-slate-500">Private Client Portal</span>
             </div>
 
             {/* Submit Button */}

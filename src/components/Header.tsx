@@ -54,8 +54,6 @@ export const Header: React.FC<HeaderProps> = ({
               <div className="flex items-center space-x-3 text-xs text-slate-400 mt-0.5 flex-wrap">
                 <span>Account: <strong className="text-slate-200">Primary Borrower</strong></span>
                 <span className="text-slate-600">•</span>
-                <span>Loan #: <strong className="text-slate-200">{BASELINE_LOAN.loanNumber}</strong></span>
-                <span className="text-slate-600">•</span>
                 <span className="text-slate-300">{BASELINE_LOAN.propertyAddress}</span>
               </div>
             </div>

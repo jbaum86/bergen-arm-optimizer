@@ -126,7 +126,7 @@ export const AuditValidationModal: React.FC<AuditModalProps> = ({
                 Loan Statement Audit & Mathematical Verification Engine
               </h2>
               <p className="text-xs text-slate-400">
-                Verified against Wells Fargo Loan #0813684933 Official Statements & Automated Recast Architecture
+                Verified against Official Mortgage Statements & Automated Recast Architecture
               </p>
             </div>
           </div>
