@@ -2,6 +2,7 @@
 import { BASELINE_LOAN } from '../constants/financialData';
 import type {
   RecastMode,
+  LumpSumStrategyMode,
   TaxProfile,
   StrategySimulationResult,
   AmortizationMonth,
@@ -61,12 +62,13 @@ export function calculateMarginalAfterTaxCost(balance: number, profile: TaxProfi
 }
 
 /**
- * Full Amortization Simulation for Baseline & Strategy
+ * Full Amortization Simulation for Baseline & Strategy with Automatic Recast Architecture
  */
 export function simulateAmortization({
   lumpSum = 0,
   extraMonthly = 0,
-  recastMode = 'no_recast' as RecastMode,
+  recastMode,
+  strategyMode = 'maintain_flat',
   stopAt750k = false,
   resetRate = BASELINE_LOAN.maxFirstResetRate, // 10.750%
   taxProfile,
@@ -74,29 +76,62 @@ export function simulateAmortization({
   lumpSum?: number;
   extraMonthly?: number;
   recastMode?: RecastMode;
+  strategyMode?: LumpSumStrategyMode;
   stopAt750k?: boolean;
   resetRate?: number;
   taxProfile: TaxProfile;
 }): StrategySimulationResult {
+  const isRecastQualified = lumpSum >= 10000;
   const initialBalance = BASELINE_LOAN.activeStartingBalance - lumpSum;
   const fixedMonths = BASELINE_LOAN.fixedMonthsRemaining; // 107
   const variableMonths = BASELINE_LOAN.variableMonthsRemaining; // 240
   const grossFixedRate = BASELINE_LOAN.currentInterestRate; // 0.0575
   const baselineMonthlyPI = BASELINE_LOAN.currentMonthlyPI; // 6454.32
 
-  // Determine contractual required payment during fixed period
-  let contractualMonthlyPI = baselineMonthlyPI;
-  if (recastMode === 'free_recast' || recastMode === 'hybrid_shadow') {
-    if (lumpSum >= 10000) {
-      contractualMonthlyPI = calculatePmt(initialBalance, grossFixedRate, BASELINE_LOAN.totalRemainingMonths);
+  // Determine effective strategy mode (honoring legacy recastMode if passed)
+  let effectiveStrategyMode: LumpSumStrategyMode = strategyMode;
+  if (recastMode === 'free_recast') {
+    effectiveStrategyMode = 'take_reduced';
+  } else if (recastMode === 'no_recast' || recastMode === 'hybrid_shadow') {
+    effectiveStrategyMode = 'maintain_flat';
+  }
+
+  // Recast Required Monthly P&I (P_recast)
+  const recastRequiredMonthlyPI = isRecastQualified
+    ? calculatePmt(initialBalance, grossFixedRate, BASELINE_LOAN.totalRemainingMonths)
+    : baselineMonthlyPI;
+
+  // Incremental principal and out-of-pocket payment logic
+  let recastIncrementalPrincipal = 0;
+  let totalMonthlyIncrementalPrincipal = extraMonthly;
+  let totalOutOfPocketMonthlyPI = baselineMonthlyPI + extraMonthly;
+  let monthlyCashFlowRelief = 0;
+
+  if (isRecastQualified) {
+    if (effectiveStrategyMode === 'maintain_flat') {
+      // Mode A: Maintain Flat Payment ($6,454.32)
+      recastIncrementalPrincipal = Math.max(0, baselineMonthlyPI - recastRequiredMonthlyPI);
+      totalMonthlyIncrementalPrincipal = recastIncrementalPrincipal + extraMonthly;
+      totalOutOfPocketMonthlyPI = baselineMonthlyPI + extraMonthly;
+      monthlyCashFlowRelief = 0;
+    } else {
+      // Mode B: Take Reduced Recast Payment
+      recastIncrementalPrincipal = 0;
+      totalMonthlyIncrementalPrincipal = extraMonthly;
+      totalOutOfPocketMonthlyPI = recastRequiredMonthlyPI + extraMonthly;
+      monthlyCashFlowRelief = Math.max(0, baselineMonthlyPI - recastRequiredMonthlyPI);
     }
   }
+
+  const annualCashFlowRelief = monthlyCashFlowRelief * 12;
 
   let balance = initialBalance;
   let fixedPeriodInterestPaid = 0;
   const fullSchedule: AmortizationMonth[] = [];
 
   const startDate = new Date(2026, 9, 1); // October 2026
+  let crossingMonthNYCap: number | null = initialBalance <= BASELINE_LOAN.statutoryCaps.nyDecoupledCap ? 0 : null;
+  let crossingMonthFedCap: number | null = initialBalance <= BASELINE_LOAN.statutoryCaps.federalAcquisitionCap ? 0 : null;
 
   // 1. Fixed Period Simulation (Month 1 to 107)
   for (let m = 1; m <= fixedMonths; m++) {
@@ -121,38 +156,42 @@ export function simulateAmortization({
     const monthlyRate = grossFixedRate / 12;
     const interest = balance * monthlyRate;
 
-    let baseRequired = contractualMonthlyPI;
-    let extra = extraMonthly;
+    // Determine out-of-pocket base payment
+    const basePmt = isRecastQualified && effectiveStrategyMode === 'take_reduced'
+      ? recastRequiredMonthlyPI
+      : baselineMonthlyPI;
 
-    if (recastMode === 'hybrid_shadow') {
-      // In hybrid mode, user pays contractual floor PLUS the difference up to baseline $6454.32
-      const shadowBonus = Math.max(0, baselineMonthlyPI - contractualMonthlyPI);
-      extra += shadowBonus;
-    }
-
+    let activeExtra = extraMonthly;
     if (stopAt750k && balance <= BASELINE_LOAN.statutoryCaps.federalAcquisitionCap) {
-      extra = 0;
+      activeExtra = 0;
     }
 
-    let totalPrincipal = baseRequired - interest + extra;
-    let actualPayment = baseRequired + extra;
+    let actualPayment = basePmt + activeExtra;
+    let totalPrincipal = actualPayment - interest;
 
     if (totalPrincipal > balance) {
       totalPrincipal = balance;
       actualPayment = interest + totalPrincipal;
-      extra = Math.max(0, totalPrincipal - (baseRequired - interest));
     }
 
     balance -= totalPrincipal;
     fixedPeriodInterestPaid += interest;
+
+    // Track cap crossings
+    if (crossingMonthNYCap === null && balance <= BASELINE_LOAN.statutoryCaps.nyDecoupledCap) {
+      crossingMonthNYCap = m;
+    }
+    if (crossingMonthFedCap === null && balance <= BASELINE_LOAN.statutoryCaps.federalAcquisitionCap) {
+      crossingMonthFedCap = m;
+    }
 
     fullSchedule.push({
       month: m,
       dateStr,
       balance: Math.max(0, balance),
       interest,
-      principal: totalPrincipal - extra,
-      extraPrincipal: extra,
+      principal: totalPrincipal - activeExtra,
+      extraPrincipal: activeExtra + (isRecastQualified && effectiveStrategyMode === 'maintain_flat' ? recastIncrementalPrincipal : 0),
       totalPayment: actualPayment,
       isFixedPeriod: true,
       rate: grossFixedRate,
@@ -213,6 +252,10 @@ export function simulateAmortization({
   const baselineInterest = 519359.92;
   const fixedPeriodInterestSaved = Math.max(0, baselineInterest - fixedPeriodInterestPaid);
 
+  // Cumulative incremental principal retired vs baseline ($171,252.30 retired in baseline)
+  const totalPrincipalRetired = BASELINE_LOAN.activeStartingBalance - endFixedBalance;
+  const cumulativeIncrementalPrincipalRetired = Math.max(0, totalPrincipalRetired - 171252.30);
+
   // Active debt stack tier breakdown
   const tier1 = Math.max(0, initialBalance - BASELINE_LOAN.statutoryCaps.nyDecoupledCap);
   const tier2 = Math.max(
@@ -228,16 +271,25 @@ export function simulateAmortization({
     endFixedBalance,
     fixedPeriodInterestPaid,
     fixedPeriodInterestSaved,
-    effectiveMonthlyPayment: contractualMonthlyPI,
-    cashFlowPayment:
-      recastMode === 'hybrid_shadow'
-        ? baselineMonthlyPI + (stopAt750k && initialBalance <= 750000 ? 0 : extraMonthly)
-        : contractualMonthlyPI + (stopAt750k && initialBalance <= 750000 ? 0 : extraMonthly),
+    effectiveMonthlyPayment: recastRequiredMonthlyPI, // Contractual recast floor
+    cashFlowPayment: totalOutOfPocketMonthlyPI,
     postResetRate: resetRate,
     postResetMonthlyPI,
     fullSchedule,
     tierBreakdown: { tier1, tier2, tier3 },
     marginalAfterTaxCost,
+    // Enhanced Recast Telemetry
+    isRecastQualified,
+    strategyMode: effectiveStrategyMode,
+    recastRequiredMonthlyPI,
+    recastIncrementalPrincipal,
+    totalMonthlyIncrementalPrincipal,
+    totalOutOfPocketMonthlyPI,
+    monthlyCashFlowRelief,
+    annualCashFlowRelief,
+    crossingMonthNYCap,
+    crossingMonthFedCap,
+    cumulativeIncrementalPrincipalRetired,
   };
 }
 

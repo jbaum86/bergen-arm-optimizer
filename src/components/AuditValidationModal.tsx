@@ -6,12 +6,12 @@ import {
 } from 'lucide-react';
 import { BASELINE_LOAN, AUDIT_CHECKPOINTS, TAX_PROFILES } from '../constants/financialData';
 import { formatCurrency, simulateAmortization, calculatePmt } from '../utils/financialCalculations';
-import type { RecastMode } from '../types/financial';
+import type { LumpSumStrategyMode } from '../types/financial';
 
 interface AuditModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onApplyStrategy: (lumpSum: number, extraMonthly: number, recastMode: RecastMode) => void;
+  onApplyStrategy: (lumpSum: number, extraMonthly: number, strategyMode: LumpSumStrategyMode) => void;
 }
 
 export const AuditValidationModal: React.FC<AuditModalProps> = ({
@@ -28,39 +28,39 @@ export const AuditValidationModal: React.FC<AuditModalProps> = ({
   const baselineSim = simulateAmortization({
     lumpSum: 0,
     extraMonthly: 0,
-    recastMode: 'no_recast',
+    strategyMode: 'maintain_flat',
     resetRate: 0.1075,
     taxProfile: defaultProfile,
   });
 
-  // 2. Strategy 9 ($90,532.21 lump sum, no recast)
+  // 2. Checkpoint 1 (Strategy 9): $90,532.21 lump sum + Mode A (Flat $6,454.32) + $0/mo slider
   const strat9Sim = simulateAmortization({
     lumpSum: 90532.21,
     extraMonthly: 0,
-    recastMode: 'no_recast',
-    resetRate: 0.1075,
+    strategyMode: 'maintain_flat',
+    resetRate: 0.08, // 8.00% reset check
     taxProfile: defaultProfile,
   });
+  const strat9Reset8 = calculatePmt(strat9Sim.endFixedBalance, 0.08, 240);
 
-  // 3. Strategy 10 ($90,532.21 lump sum with free recast over 347 mos)
+  // 3. Checkpoint 2 (Strategy 10): $90,532.21 lump sum + Mode B (Take Reduced) + $0/mo slider
   const strat10Sim = simulateAmortization({
     lumpSum: 90532.21,
     extraMonthly: 0,
-    recastMode: 'free_recast',
+    strategyMode: 'take_reduced',
     resetRate: 0.1075,
     taxProfile: defaultProfile,
   });
 
-  // 4. Strategy 13 ($90,532.21 lump sum + $1,000/mo extra, no recast)
+  // 4. Checkpoint 3 (Strategy 13): $90,532.21 lump sum + Mode A (Flat $6,454.32) + $1,000/mo extra
   const strat13Sim = simulateAmortization({
     lumpSum: 90532.21,
     extraMonthly: 1000,
-    recastMode: 'no_recast',
+    strategyMode: 'maintain_flat',
     resetRate: 0.1075,
     taxProfile: defaultProfile,
   });
-
-  const strat13ResetPmt = calculatePmt(strat13Sim.endFixedBalance, 0.1075, 240);
+  const strat13Reset1075 = calculatePmt(strat13Sim.endFixedBalance, 0.1075, 240);
 
   const testCases = [
     {
@@ -71,38 +71,44 @@ export const AuditValidationModal: React.FC<AuditModalProps> = ({
         { label: '09/01/2035 Ending Balance', target: AUDIT_CHECKPOINTS.baselineEndingBalance, calculated: baselineSim.endFixedBalance },
         { label: 'Fixed-Period Interest Saved', target: 0.0, calculated: baselineSim.fixedPeriodInterestSaved },
       ],
-      action: () => onApplyStrategy(0, 0, 'no_recast'),
+      action: () => onApplyStrategy(0, 0, 'maintain_flat'),
     },
     {
       id: 'strat9',
-      title: 'Strategy 9: Clear Tier 1 to $1.0M Cap (No Recast)',
-      parameters: '$90,532.21 Lump-Sum Curtailment, No Recast (keep $6,454.32/mo)',
+      title: 'Checkpoint 1: $90,532.21 Lump Sum + Mode A (Maintain Flat $6,454.32)',
+      parameters: 'Recast Required $5,918.41/mo + $535.91/mo Auto Incremental Principal',
       targetMetrics: [
-        { label: '09/01/2035 Ending Balance', target: AUDIT_CHECKPOINTS.strategy9EndingBalance, calculated: strat9Sim.endFixedBalance },
-        { label: 'Fixed-Period Interest Saved', target: AUDIT_CHECKPOINTS.strategy9InterestSaved, calculated: strat9Sim.fixedPeriodInterestSaved },
+        { label: 'Recast Required Floor', target: 5918.41, calculated: strat9Sim.recastRequiredMonthlyPI },
+        { label: 'Auto Incremental Principal', target: 535.91, calculated: strat9Sim.recastIncrementalPrincipal },
+        { label: '09/01/2035 Ending Balance', target: 768293.48, calculated: strat9Sim.endFixedBalance },
+        { label: 'Fixed Interest Saved', target: 60454.22, calculated: strat9Sim.fixedPeriodInterestSaved },
+        { label: '2035 Reset P&I @ 8.00%', target: 6426.31, calculated: strat9Reset8 },
       ],
-      action: () => onApplyStrategy(90532.21, 0, 'no_recast'),
+      action: () => onApplyStrategy(90532.21, 0, 'maintain_flat'),
     },
     {
       id: 'strat10',
-      title: 'Strategy 10: Clear Tier 1 + Free Jumbo Recast',
-      parameters: '$90,532.21 Lump-Sum Curtailment with Free Recast across 347 months',
+      title: 'Checkpoint 2: $90,532.21 Lump Sum + Mode B (Take Reduced Recast)',
+      parameters: 'Required P&I drops to $5,918.41/mo (+$535.91/mo Household Cash Relief)',
       targetMetrics: [
-        { label: 'New Required Monthly P&I', target: AUDIT_CHECKPOINTS.strategy10RecastPmt, calculated: strat10Sim.effectiveMonthlyPayment },
-        { label: 'Fixed-Period Interest Saved', target: AUDIT_CHECKPOINTS.strategy10InterestSaved, calculated: strat10Sim.fixedPeriodInterestSaved },
+        { label: 'Required P&I Paid', target: 5918.41, calculated: strat10Sim.totalOutOfPocketMonthlyPI },
+        { label: 'Monthly Cash Flow Relief', target: 535.91, calculated: strat10Sim.monthlyCashFlowRelief },
+        { label: '09/01/2035 Ending Balance', target: 842977.66, calculated: strat10Sim.endFixedBalance },
+        { label: 'Fixed Interest Saved', target: 43112.41, calculated: strat10Sim.fixedPeriodInterestSaved },
       ],
-      action: () => onApplyStrategy(90532.21, 0, 'free_recast'),
+      action: () => onApplyStrategy(90532.21, 0, 'take_reduced'),
     },
     {
       id: 'strat13',
-      title: 'Strategy 13: Clear Tier 1 + $1,000/mo Extra Principal',
-      parameters: '$90,532.21 Lump-Sum + $1,000/mo Extra Principal, No Recast',
+      title: 'Checkpoint 3: $90,532.21 Lump Sum + Mode A + $1,000/mo Extra Principal',
+      parameters: 'Total Out-of-Pocket $7,454.32/mo (+ $1,535.91/mo Total Incremental Principal)',
       targetMetrics: [
-        { label: '09/01/2035 Ending Balance', target: AUDIT_CHECKPOINTS.strategy13EndingBalance, calculated: strat13Sim.endFixedBalance },
-        { label: 'Fixed-Period Interest Saved', target: AUDIT_CHECKPOINTS.strategy13InterestSaved, calculated: strat13Sim.fixedPeriodInterestSaved },
-        { label: 'Post-Reset P&I @ 10.75% Cap', target: AUDIT_CHECKPOINTS.strategy13ResetPayment1075, calculated: strat13ResetPmt },
+        { label: 'Total Incremental Principal', target: 1535.91, calculated: strat13Sim.totalMonthlyIncrementalPrincipal },
+        { label: '09/01/2035 Ending Balance', target: 628934.05, calculated: strat13Sim.endFixedBalance },
+        { label: 'Fixed Interest Saved', target: 92813.65, calculated: strat13Sim.fixedPeriodInterestSaved },
+        { label: 'Post-Reset P&I @ 10.75% Cap', target: 6385.12, calculated: strat13Reset1075 },
       ],
-      action: () => onApplyStrategy(90532.21, 1000, 'no_recast'),
+      action: () => onApplyStrategy(90532.21, 1000, 'maintain_flat'),
     },
   ];
 
@@ -120,7 +126,7 @@ export const AuditValidationModal: React.FC<AuditModalProps> = ({
                 Loan Statement Audit & Mathematical Verification Engine
               </h2>
               <p className="text-xs text-slate-400">
-                Verified against Wells Fargo Loan #0813684933 Official Statements
+                Verified against Wells Fargo Loan #0813684933 Official Statements & Automated Recast Architecture
               </p>
             </div>
           </div>
@@ -190,23 +196,21 @@ export const AuditValidationModal: React.FC<AuditModalProps> = ({
                   </button>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 pt-1 border-t border-white/5">
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-2.5 pt-1 border-t border-white/5">
                   {tc.targetMetrics.map((m, idx) => {
                     const diff = Math.abs(m.calculated - m.target);
                     const isMatch = diff < 0.50; // sub-dollar precision match
                     return (
-                      <div key={idx} className="p-2.5 rounded-lg bg-white/[0.02] border border-white/5">
-                        <div className="text-[10px] text-slate-400">{m.label}</div>
+                      <div key={idx} className="p-2 rounded-lg bg-white/[0.02] border border-white/5">
+                        <div className="text-[9px] text-slate-400 truncate">{m.label}</div>
                         <div className="flex items-center justify-between mt-1">
-                          <span className="font-mono font-bold text-white text-xs">
+                          <span className="font-mono font-bold text-white text-[11px]">
                             {formatCurrency(m.calculated)}
                           </span>
-                          <span className="text-[10px] font-mono text-emerald-400 font-semibold flex items-center gap-0.5">
-                            {isMatch ? '✓ Verified' : 'Diff: ' + diff.toFixed(2)}
-                          </span>
                         </div>
-                        <div className="text-[9px] text-slate-400 font-mono mt-0.5">
-                          Target: {formatCurrency(m.target)}
+                        <div className="flex items-center justify-between text-[9px] text-slate-400 font-mono mt-0.5">
+                          <span>Target: {formatCurrency(m.target)}</span>
+                          <span className="text-emerald-400 font-semibold">{isMatch ? '✓' : diff.toFixed(1)}</span>
                         </div>
                       </div>
                     );

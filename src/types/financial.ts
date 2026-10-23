@@ -1,6 +1,7 @@
 // src/types/financial.ts
 
 export type RecastMode = 'no_recast' | 'free_recast' | 'hybrid_shadow';
+export type LumpSumStrategyMode = 'maintain_flat' | 'take_reduced';
 
 export interface TaxProfile {
   id: 'profile_a' | 'profile_b' | 'profile_c' | 'custom';
@@ -59,8 +60,8 @@ export interface StrategySimulationResult {
   endFixedBalance: number; // Balance on 09/01/2035 (month 107)
   fixedPeriodInterestPaid: number; // Total interest paid over 107 months
   fixedPeriodInterestSaved: number; // vs Baseline $519,359.92 (or $524,591.27 including Oct 2026)
-  effectiveMonthlyPayment: number; // Contractual required P&I
-  cashFlowPayment: number; // Actual cash paid (including extra)
+  effectiveMonthlyPayment: number; // Contractual required P&I floor (P_recast)
+  cashFlowPayment: number; // Actual total out-of-pocket P&I paid
   postResetRate: number; // e.g. 10.75% or selected slider rate
   postResetMonthlyPI: number; // Required P&I after 09/01/2035 across 240 remaining months
   fullSchedule: AmortizationMonth[];
@@ -70,6 +71,18 @@ export interface StrategySimulationResult {
     tier3: number; // $0 to $750,000
   };
   marginalAfterTaxCost: number; // After-tax interest cost on next dollar
+  // Module B Enhanced Servicing Architecture
+  isRecastQualified: boolean; // lumpSum >= $10,000
+  strategyMode: LumpSumStrategyMode;
+  recastRequiredMonthlyPI: number; // P_recast
+  recastIncrementalPrincipal: number; // Delta_recast ($6,454.32 - P_recast in Mode A, $0 in Mode B)
+  totalMonthlyIncrementalPrincipal: number; // P_incremental = Delta_recast + recurring extra
+  totalOutOfPocketMonthlyPI: number; // P_total
+  monthlyCashFlowRelief: number; // $0 in Mode A, $6,454.32 - P_recast in Mode B
+  annualCashFlowRelief: number; // 12 * monthlyCashFlowRelief
+  crossingMonthNYCap: number | null; // Month when balance crosses below $1,000,000
+  crossingMonthFedCap: number | null; // Month when balance crosses below $750,000
+  cumulativeIncrementalPrincipalRetired: number;
 }
 
 export interface AssetBenchmark {

@@ -8,7 +8,7 @@ import { ModuleD_CemaRefinance } from './components/ModuleD_CemaRefinance';
 import { AuditValidationModal } from './components/AuditValidationModal';
 import { LockScreen } from './components/LockScreen';
 import { TAX_PROFILES } from './constants/financialData';
-import type { RecastMode, TaxProfile } from './types/financial';
+import type { LumpSumStrategyMode, TaxProfile } from './types/financial';
 import { simulateAmortization } from './utils/financialCalculations';
 import { FileText } from 'lucide-react';
 
@@ -24,7 +24,7 @@ export function App() {
   // Global Strategy & Financial State
   const [lumpSum, setLumpSum] = useState<number>(0);
   const [extraMonthly, setExtraMonthly] = useState<number>(0);
-  const [recastMode, setRecastMode] = useState<RecastMode>('no_recast');
+  const [strategyMode, setStrategyMode] = useState<LumpSumStrategyMode>('maintain_flat');
   const [stopAt750k, setStopAt750k] = useState<boolean>(false);
   const [resetRate, setResetRate] = useState<number>(0.1075); // 10.750% max first reset / lifetime cap
   const [taxProfile, setTaxProfile] = useState<TaxProfile>(TAX_PROFILES.profile_b);
@@ -36,21 +36,21 @@ export function App() {
     return simulateAmortization({
       lumpSum,
       extraMonthly,
-      recastMode,
+      strategyMode,
       stopAt750k,
       resetRate,
       taxProfile,
     });
-  }, [lumpSum, extraMonthly, recastMode, stopAt750k, resetRate, taxProfile]);
+  }, [lumpSum, extraMonthly, strategyMode, stopAt750k, resetRate, taxProfile]);
 
   const handleApplyStrategy = (
     newLump: number,
     newExtra: number,
-    newRecast: RecastMode
+    newStrategyMode: LumpSumStrategyMode = 'maintain_flat'
   ) => {
     setLumpSum(newLump);
     setExtraMonthly(newExtra);
-    setRecastMode(newRecast);
+    setStrategyMode(newStrategyMode);
   };
 
   const handleLock = () => {
@@ -110,10 +110,10 @@ export function App() {
               <ModuleB_AmortizationRecast
                 lumpSum={lumpSum}
                 setLumpSum={setLumpSum}
+                strategyMode={strategyMode}
+                setStrategyMode={setStrategyMode}
                 extraMonthly={extraMonthly}
                 setExtraMonthly={setExtraMonthly}
-                recastMode={recastMode}
-                setRecastMode={setRecastMode}
                 stopAt750k={stopAt750k}
                 setStopAt750k={setStopAt750k}
                 resetRate={resetRate}
@@ -153,10 +153,10 @@ export function App() {
           <ModuleB_AmortizationRecast
             lumpSum={lumpSum}
             setLumpSum={setLumpSum}
+            strategyMode={strategyMode}
+            setStrategyMode={setStrategyMode}
             extraMonthly={extraMonthly}
             setExtraMonthly={setExtraMonthly}
-            recastMode={recastMode}
-            setRecastMode={setRecastMode}
             stopAt750k={stopAt750k}
             setStopAt750k={setStopAt750k}
             resetRate={resetRate}
