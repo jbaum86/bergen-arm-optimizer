@@ -4,11 +4,16 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
+  schedule:
+    # Refresh market rates every weekday at 14:30 UTC (~9:30/10:30 AM New York),
+    # after the daily Optimal Blue / Treasury prints are published.
+    - cron: '30 14 * * 1-5'
 
 permissions:
   contents: read
   pages: write
   id-token: write
+  issues: write
 
 concurrency:
   group: 'pages'
@@ -32,6 +37,30 @@ jobs:
 
       - name: Install dependencies
         run: npm ci
+
+      - name: Fetch latest mortgage & benchmark rates (FRED)
+        run: node scripts/fetch-rates.mjs
+
+      - name: Check refinance trigger
+        id: alert
+        run: node scripts/check-rate-alert.mjs
+
+      - name: Open refinance alert issue (emails repo owner)
+        if: steps.alert.outputs.status == 'refi'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BODY: ${{ steps.alert.outputs.body }}
+          EFFECTIVE: ${{ steps.alert.outputs.effective }}
+        run: |
+          gh label create rate-alert --color E11D48 --description "Refinance trigger reached" --force --repo "$GITHUB_REPOSITORY"
+          OPEN=$(gh issue list --repo "$GITHUB_REPOSITORY" --label rate-alert --state open --json number --jq 'length')
+          if [ "$OPEN" = "0" ]; then
+            gh issue create --repo "$GITHUB_REPOSITORY" --label rate-alert \
+              --title "🔔 Refi trigger hit: effective rate ${EFFECTIVE}%" \
+              --body "$BODY"
+          else
+            echo "An open rate-alert issue already exists; not creating a duplicate."
+          fi
 
       - name: Build project
         run: npm run build

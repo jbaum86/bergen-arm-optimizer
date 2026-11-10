@@ -4,6 +4,8 @@ import { ModuleA_TaxShield } from './components/ModuleA_TaxShield';
 import { ModuleB_AmortizationRecast } from './components/ModuleB_AmortizationRecast';
 import { ModuleC_OpportunityCost } from './components/ModuleC_OpportunityCost';
 import { ModuleTaxReturn } from './components/ModuleTaxReturn';
+import { ModuleRateWatch, RateWatchSummaryCard, DEFAULT_REFI_SETTINGS } from './components/ModuleRateWatch';
+import type { RefiSettings } from './components/ModuleRateWatch';
 
 import { AuditValidationModal } from './components/AuditValidationModal';
 import { LockScreen } from './components/LockScreen';
@@ -58,6 +60,25 @@ export function App() {
 
   const [activeTab, setActiveTab] = useState<string>('unified');
   const [isAuditModalOpen, setIsAuditModalOpen] = useState<boolean>(false);
+
+  // Rate Watch & Refi Trigger settings (persisted)
+  const [refiSettings, setRefiSettingsState] = useState<RefiSettings>(() => {
+    try {
+      const saved = localStorage.getItem('bergen_refi_settings');
+      if (saved) return { ...DEFAULT_REFI_SETTINGS, ...JSON.parse(saved) };
+    } catch (e) {
+      console.error('Error loading refi settings', e);
+    }
+    return DEFAULT_REFI_SETTINGS;
+  });
+  const setRefiSettings = (s: RefiSettings) => {
+    setRefiSettingsState(s);
+    try {
+      localStorage.setItem('bergen_refi_settings', JSON.stringify(s));
+    } catch (e) {
+      console.error('Error saving refi settings', e);
+    }
+  };
 
   // Compute live strategy simulation
   const simulation = useMemo(() => {
@@ -162,6 +183,10 @@ export function App() {
         {activeTab === 'unified' && (
           <div className="space-y-8">
             <section>
+              <RateWatchSummaryCard settings={refiSettings} onOpen={() => setActiveTab('moduleRates')} />
+            </section>
+
+            <section>
               <ModuleA_TaxShield
                 simulation={simulation}
                 taxProfile={taxProfile}
@@ -247,6 +272,11 @@ export function App() {
             onResetToBaseline={handleResetTaxProfile}
             onNavigateToTab={setActiveTab}
           />
+        )}
+
+        {/* Tab 6: Rate Watch & Refi Trigger */}
+        {activeTab === 'moduleRates' && (
+          <ModuleRateWatch settings={refiSettings} setSettings={setRefiSettings} />
         )}
       </main>
 

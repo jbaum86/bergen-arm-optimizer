@@ -6,6 +6,7 @@ import {
   TrendingUp,
   Layers,
   Calculator,
+  Radar,
 } from 'lucide-react';
 import { BASELINE_LOAN } from '../constants/financialData';
 import { formatCurrency } from '../utils/financialCalculations';
@@ -31,6 +32,7 @@ export const Header: React.FC<HeaderProps> = ({
     { id: 'moduleB', label: 'Recast & Reset Stress-Test', icon: Sliders },
     { id: 'moduleC', label: 'Alternative Opportunity Cost', icon: TrendingUp },
     { id: 'moduleTax', label: 'Tax Return & Rate Engine', icon: Calculator, badge: isReturnDriven },
+    { id: 'moduleRates', label: 'Rate Watch & Refi Trigger', icon: Radar },
   ];
 
   return (
