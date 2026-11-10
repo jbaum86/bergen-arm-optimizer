@@ -2,7 +2,7 @@
   "currentNoteRate": 5.75,
   "relationshipDiscount": 0.5,
   "benchmarkSeries": "jumbo30",
-  "alertEffectiveRate": 4.56,
-  "watchEffectiveRate": 4.935,
+  "alertEffectiveRate": 5.44,
+  "watchEffectiveRate": 5.815,
   "notifyGithubUser": "jbaum86"
 }

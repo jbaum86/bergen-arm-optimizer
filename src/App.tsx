@@ -64,7 +64,7 @@ export function App() {
   // Rate Watch & Refi Trigger settings (persisted)
   const [refiSettings, setRefiSettingsState] = useState<RefiSettings>(() => {
     try {
-      const saved = localStorage.getItem('bergen_refi_settings');
+      const saved = localStorage.getItem('bergen_refi_settings_v2');
       if (saved) return { ...DEFAULT_REFI_SETTINGS, ...JSON.parse(saved) };
     } catch (e) {
       console.error('Error loading refi settings', e);
@@ -74,7 +74,7 @@ export function App() {
   const setRefiSettings = (s: RefiSettings) => {
     setRefiSettingsState(s);
     try {
-      localStorage.setItem('bergen_refi_settings', JSON.stringify(s));
+      localStorage.setItem('bergen_refi_settings_v2', JSON.stringify(s));
     } catch (e) {
       console.error('Error saving refi settings', e);
     }

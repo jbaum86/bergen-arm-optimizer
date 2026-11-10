@@ -53,3 +53,4 @@ if (process.env.GITHUB_OUTPUT) {
     `status=${status}\neffective=${effective.toFixed(3)}\nmarket=${market.toFixed(3)}\nbody<<${delim}\n${body}\n${delim}\n`
   );
 }
+

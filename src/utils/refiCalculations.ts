@@ -119,3 +119,4 @@ export function solveTriggerRate(
 
   return Math.min(breakevenRate, netBenefitRate);
 }
+

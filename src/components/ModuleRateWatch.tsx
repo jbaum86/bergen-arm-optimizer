@@ -54,7 +54,7 @@ export const DEFAULT_REFI_SETTINGS: RefiSettings = {
   benchmark: 'jumbo30',
   lenderQuote: null,
   lenderFees: 7500,
-  includeRecordingTax: true,
+  includeRecordingTax: false, // same-lender WF refi: recording tax applies only to new money (none on a rate/term refi)
   termMode: 'match',
   breakevenTargetMonths: 36,
   horizonMonths: 84,
@@ -471,8 +471,11 @@ export function ModuleRateWatch({
 
           <label className="flex items-start justify-between gap-3 text-xs text-slate-300">
             <span>
-              Include NYC mortgage recording tax (1.925%)
-              <span className="block text-[10px] text-slate-500">{formatCurrency(a.position.balance * NYC_MORTGAGE_RECORDING_TAX_RATE, 0)} on current balance</span>
+              Charge NYC mortgage recording tax (1.925%)
+              <span className="block text-[10px] text-slate-500">
+                Off by default — a same-lender Wells Fargo rate/term refi carries no recording tax on the existing balance. Turn on only to model
+                switching lenders without an assignment ({formatCurrency(a.position.balance * NYC_MORTGAGE_RECORDING_TAX_RATE, 0)}).
+              </span>
             </span>
             <input type="checkbox" checked={settings.includeRecordingTax} onChange={(e) => update('includeRecordingTax', e.target.checked)} className="cursor-pointer mt-0.5" />
           </label>
