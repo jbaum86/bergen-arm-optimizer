@@ -2,12 +2,28 @@
   "currentNoteRate": 5.75,
   "relationshipDiscount": 0.5,
   "benchmarkSeries": "wf7YrArm",
+  "wellsFargoBrooklyn": {
+    "city": "Brooklyn",
+    "stateCode": "NY",
+    "county": "Kings",
+    "fipsCode": "047",
+    "homeValue": 1390000,
+    "mortgageBalance": 1090000
+  },
   "wf7YrArm": {
-    "label": "Wells Fargo 7-Yr ARM (7/6m SOFR Jumbo)",
+    "productName": "7/6-Month ARM Jumbo",
+    "label": "WF 7/6-Mo ARM Jumbo (Brooklyn, NY)",
     "quotedBaseRate": null,
-    "spreadVsJumbo30": -0.5,
+    "spreadVsJumbo30": -0.469,
     "relationshipDiscount": 0.5,
     "fixedPeriodMonths": 84
+  },
+  "wf30YrJumbo": {
+    "productName": "30-Year Fixed-Rate Jumbo",
+    "label": "WF 30-Yr Fixed Jumbo (Brooklyn, NY)",
+    "quotedBaseRate": null,
+    "spreadVsJumbo30": 0.406,
+    "relationshipDiscount": 0.5
   },
   "alertEffectiveRate": 5.44,
   "watchEffectiveRate": 5.815,

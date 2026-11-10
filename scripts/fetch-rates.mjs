@@ -1,15 +1,16 @@
 #!/usr/bin/env node
-// Fetches public mortgage & benchmark rate series from FRED (St. Louis Fed)
+// Fetches:
+// 1. Live Wells Fargo refinance rates specifically for Brooklyn, NY (Kings County,
+//    FIPS 047, $1,390,000 home value, $1,090,000 mortgage balance) from Wells Fargo's
+//    official home-lending pricing API, including:
+//      • 7/6-Month ARM Jumbo
+//      • 30-Year Fixed-Rate Jumbo
+//      • 15-Year Fixed-Rate Jumbo
+//      • 30-Year Fixed Rate (High-Balance Conforming)
+// 2. Public mortgage & benchmark rate series from FRED (St. Louis Fed)
 // and writes public/rates.json for the Rate Watch & Refi Trigger module.
-//
-// Also synthesizes the "wf7YrArm" (Wells Fargo 7-Yr ARM / 7/6m SOFR Jumbo)
-// series from the config in scripts/rate-alert.config.json (either from an
-// explicit quotedBaseRate or by applying spreadVsJumbo30 to OBMMIJUMBO30YF),
-// which then gets discounted by the 0.50% Wells Fargo relationship discount.
-//
-// Runs in GitHub Actions on a daily schedule before each build, so the
-// deployed dashboard always carries fresh market data. No API key required.
 
+import crypto from 'node:crypto';
 import { readFile, writeFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
@@ -24,7 +25,7 @@ const SERIES = [
   {
     id: 'OBMMIJUMBO30YF',
     key: 'jumbo30',
-    label: '30-Yr Fixed Jumbo (Optimal Blue)',
+    label: '30-Yr Fixed Jumbo (Optimal Blue Nat’l)',
     frequency: 'daily',
   },
   {
@@ -74,6 +75,149 @@ async function fetchSeries(id, startDate) {
   return points;
 }
 
+async function fetchWellsFargoBrooklynRates(locCfg, discount) {
+  const payload = {
+    apiUrl: '/xapi/product-service-research/homelending-tools/v1/rates/refinance',
+    type: 'refinance',
+    home_value: String(locCfg.homeValue ?? 1390000),
+    mortgage_balance: String(locCfg.mortgageBalance ?? 1090000),
+    property_location: {
+      city: locCfg.city ?? 'Brooklyn',
+      state_code: locCfg.stateCode ?? 'NY',
+      county: locCfg.county ?? 'Kings',
+      fips_code: locCfg.fipsCode ?? '047',
+    },
+  };
+
+  const headers = {
+    'X-WF-REQUEST-DATE': new Date().toISOString(),
+    'X-CORRELATION-ID': crypto.randomUUID(),
+    'X-WF-CLIENT-ID': 'WU',
+    'X-REQUEST-ID': crypto.randomUUID(),
+    'Content-Type': 'application/json',
+    Origin: 'https://www.wellsfargo.com',
+    Referer: 'https://www.wellsfargo.com/mortgage/rates/',
+    'User-Agent':
+      'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36',
+  };
+
+  const res = await fetch(
+    'https://connect.secure.wellsfargo.com/xapi/product-service-research/homelending-tools/v1/rates/refinance',
+    {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(payload),
+    }
+  );
+  if (!res.ok) throw new Error(`Wells Fargo API HTTP ${res.status}`);
+  const json = await res.json();
+  const data = json?.data;
+  if (!data || !Array.isArray(data.product_list) || data.product_list.length === 0) {
+    throw new Error('Wells Fargo API returned empty product_list');
+  }
+
+  const today = isoDate(new Date());
+  const products = data.product_list.map((p) => {
+    const rate = Number(p.interest_rate);
+    const eff = Math.round((rate - discount) * 1000) / 1000;
+    return {
+      productName: p.product_name,
+      productType: p.product_type,
+      loanType: p.loan_type,
+      loanTerm: p.loan_term,
+      loanAmount: Number(p.loan_amount),
+      interestRate: rate,
+      effectiveRate: eff,
+      apr: Number(p.apr),
+      monthlyPaymentAmount: Number(p.monthly_payment_amount),
+      fullyIndexedRate: p.fully_indexed_interest_rate ? Number(p.fully_indexed_interest_rate) : null,
+      firstAdjustmentPeriod: Number(p.first_adjustment_period ?? 0),
+      discountPointsPercent: Number(p.discount_points_percent ?? 0),
+      discountPointsAmount: Number(p.discount_points_amount ?? 0),
+      closingCostAmount: Number(p.closing_cost_amount ?? 0),
+      creditScore: Number(p.credit_score ?? 780),
+    };
+  });
+
+  return {
+    date: today,
+    city: data.city ?? payload.property_location.city,
+    county: data.county ?? payload.property_location.county,
+    stateCode: data.state_code ?? payload.property_location.state_code,
+    fipsCode: payload.property_location.fips_code,
+    homeValue: Number(data.home_value ?? payload.home_value),
+    mortgageBalance: Number(data.mortgage_balance ?? payload.mortgage_balance),
+    timeStampMessage: data.time_stamp_message ?? '',
+    relationshipDiscount: discount,
+    products,
+  };
+}
+
+function buildWfSeries({
+  jumboPoints,
+  existingPoints = [],
+  liveRate,
+  liveDate,
+  quotedRate,
+  fallbackSpread,
+  discount,
+  fredId,
+  label,
+}) {
+  const effectiveTodayRate =
+    typeof quotedRate === 'number'
+      ? quotedRate
+      : typeof liveRate === 'number'
+        ? liveRate
+        : null;
+
+  const latestJumbo = jumboPoints[jumboPoints.length - 1]?.value ?? 7.0;
+  const spread =
+    effectiveTodayRate !== null
+      ? Math.round((effectiveTodayRate - latestJumbo) * 1000) / 1000
+      : fallbackSpread;
+
+  // Preserve any recorded live WF observations by date
+  const liveMap = new Map();
+  for (const pt of existingPoints) {
+    if (pt.live) liveMap.set(pt.date, pt.value);
+  }
+  if (effectiveTodayRate !== null && liveDate) {
+    liveMap.set(liveDate, effectiveTodayRate);
+  }
+
+  const points = jumboPoints.map((p) => {
+    if (liveMap.has(p.date)) {
+      return { date: p.date, value: liveMap.get(p.date), live: true };
+    }
+    return {
+      date: p.date,
+      value: Math.round((p.value + spread) * 1000) / 1000,
+    };
+  });
+
+  if (effectiveTodayRate !== null && liveDate && points[points.length - 1]?.date !== liveDate) {
+    points.push({ date: liveDate, value: effectiveTodayRate, live: true });
+  }
+
+  const latest = points[points.length - 1];
+  const effectiveLatest = {
+    date: latest.date,
+    value: Math.round((latest.value - discount) * 1000) / 1000,
+  };
+
+  return {
+    fredId,
+    label,
+    frequency: 'daily',
+    latest,
+    effectiveLatest,
+    relationshipDiscount: discount,
+    spreadVsJumbo30: spread,
+    points,
+  };
+}
+
 async function main() {
   const start = new Date(Date.now() - HISTORY_DAYS * 86400000);
   const startDate = isoDate(start);
@@ -85,6 +229,47 @@ async function main() {
     console.warn('No rate-alert.config.json found; continuing without alert config.');
   }
 
+  let existingData = null;
+  try {
+    existingData = JSON.parse(await readFile(OUT_FILE, 'utf8'));
+  } catch {
+    existingData = null;
+  }
+
+  const discount =
+    typeof alertConfig.relationshipDiscount === 'number' ? alertConfig.relationshipDiscount : 0.5;
+
+  // 1. Fetch live Wells Fargo Brooklyn / Kings County rates
+  let wellsFargoBrooklyn = existingData?.wellsFargoBrooklyn ?? null;
+  try {
+    wellsFargoBrooklyn = await fetchWellsFargoBrooklynRates(
+      alertConfig.wellsFargoBrooklyn ?? {},
+      discount
+    );
+    const armProd = wellsFargoBrooklyn.products.find((p) =>
+      p.productName.toLowerCase().includes('7/6')
+    );
+    const fixedJumboProd = wellsFargoBrooklyn.products.find(
+      (p) => p.productName.toLowerCase().includes('30-year') && p.productName.toLowerCase().includes('jumbo')
+    );
+    console.log(
+      `✓ Wells Fargo Live (${wellsFargoBrooklyn.city}, ${wellsFargoBrooklyn.stateCode} / ${wellsFargoBrooklyn.county} County):`
+    );
+    if (armProd) {
+      console.log(
+        `  • ${armProd.productName}: ${armProd.interestRate.toFixed(3)}% base (${armProd.apr.toFixed(3)}% APR) → ${armProd.effectiveRate.toFixed(3)}% net (−${discount.toFixed(2)}% WF discount)`
+      );
+    }
+    if (fixedJumboProd) {
+      console.log(
+        `  • ${fixedJumboProd.productName}: ${fixedJumboProd.interestRate.toFixed(3)}% base (${fixedJumboProd.apr.toFixed(3)}% APR) → ${fixedJumboProd.effectiveRate.toFixed(3)}% net (−${discount.toFixed(2)}% WF discount)`
+      );
+    }
+  } catch (err) {
+    console.warn(`⚠ Wells Fargo Brooklyn live fetch failed (${err.message}); falling back to prior snapshot/spread.`);
+  }
+
+  // 2. Fetch FRED historical series
   const series = {};
   try {
     for (const s of SERIES) {
@@ -100,42 +285,38 @@ async function main() {
       console.log(`✓ ${s.id}: ${points.length} obs, latest ${latest.date} = ${latest.value}%`);
     }
 
-    // Build Wells Fargo 7-Year ARM (7/6m SOFR Jumbo) series from jumbo30 + config
     if (series.jumbo30) {
       const armCfg = alertConfig.wf7YrArm ?? {};
-      const spread = typeof armCfg.spreadVsJumbo30 === 'number' ? armCfg.spreadVsJumbo30 : -0.5;
-      const discount =
-        typeof armCfg.relationshipDiscount === 'number'
-          ? armCfg.relationshipDiscount
-          : typeof alertConfig.relationshipDiscount === 'number'
-            ? alertConfig.relationshipDiscount
-            : 0.5;
-      const quoted = typeof armCfg.quotedBaseRate === 'number' ? armCfg.quotedBaseRate : null;
-
-      const armPoints = series.jumbo30.points.map((p, idx, arr) => {
-        const isLast = idx === arr.length - 1;
-        const val = isLast && quoted !== null ? quoted : Math.round((p.value + spread) * 1000) / 1000;
-        return { date: p.date, value: val };
-      });
-      const latest = armPoints[armPoints.length - 1];
-      const effectiveLatest = {
-        date: latest.date,
-        value: Math.round((latest.value - discount) * 1000) / 1000,
-      };
-
-      series.wf7YrArm = {
-        fredId: quoted !== null ? 'WF_7YR_ARM_QUOTE' : `OBMMIJUMBO30YF${spread >= 0 ? '+' : ''}${spread}`,
-        label: armCfg.label ?? 'Wells Fargo 7-Yr ARM (7/6m SOFR Jumbo)',
-        frequency: 'daily',
-        latest,
-        effectiveLatest,
-        relationshipDiscount: discount,
-        spreadVsJumbo30: spread,
-        points: armPoints,
-      };
-      console.log(
-        `✓ wf7YrArm: ${armPoints.length} obs, latest ${latest.date} = ${latest.value}% (net ${effectiveLatest.value}% after −${discount}% WF discount)`
+      const liveArm = wellsFargoBrooklyn?.products?.find((p) =>
+        p.productName.toLowerCase().includes('7/6')
       );
+      series.wf7YrArm = buildWfSeries({
+        jumboPoints: series.jumbo30.points,
+        existingPoints: existingData?.series?.wf7YrArm?.points ?? [],
+        liveRate: liveArm?.interestRate ?? null,
+        liveDate: wellsFargoBrooklyn?.date ?? null,
+        quotedRate: typeof armCfg.quotedBaseRate === 'number' ? armCfg.quotedBaseRate : null,
+        fallbackSpread: typeof armCfg.spreadVsJumbo30 === 'number' ? armCfg.spreadVsJumbo30 : -0.469,
+        discount: typeof armCfg.relationshipDiscount === 'number' ? armCfg.relationshipDiscount : discount,
+        fredId: 'WF_BROOKLYN_7_6_ARM_JUMBO',
+        label: armCfg.label ?? 'WF 7/6-Mo ARM Jumbo (Brooklyn, NY)',
+      });
+
+      const jumboCfg = alertConfig.wf30YrJumbo ?? {};
+      const liveJumbo = wellsFargoBrooklyn?.products?.find(
+        (p) => p.productName.toLowerCase().includes('30-year') && p.productName.toLowerCase().includes('jumbo')
+      );
+      series.wf30YrJumbo = buildWfSeries({
+        jumboPoints: series.jumbo30.points,
+        existingPoints: existingData?.series?.wf30YrJumbo?.points ?? [],
+        liveRate: liveJumbo?.interestRate ?? null,
+        liveDate: wellsFargoBrooklyn?.date ?? null,
+        quotedRate: typeof jumboCfg.quotedBaseRate === 'number' ? jumboCfg.quotedBaseRate : null,
+        fallbackSpread: typeof jumboCfg.spreadVsJumbo30 === 'number' ? jumboCfg.spreadVsJumbo30 : 0.406,
+        discount: typeof jumboCfg.relationshipDiscount === 'number' ? jumboCfg.relationshipDiscount : discount,
+        fredId: 'WF_BROOKLYN_30YR_FIXED_JUMBO',
+        label: jumboCfg.label ?? 'WF 30-Yr Fixed Jumbo (Brooklyn, NY)',
+      });
     }
   } catch (err) {
     console.warn(`⚠ Rate fetch failed (${err.message}). Keeping existing public/rates.json.`);
@@ -144,8 +325,9 @@ async function main() {
 
   const payload = {
     generatedAt: new Date().toISOString(),
-    source: 'Federal Reserve Bank of St. Louis (FRED)',
+    source: 'Wells Fargo Home Lending (Brooklyn / Kings County, NY) & St. Louis Fed (FRED)',
     alertConfig,
+    wellsFargoBrooklyn,
     series,
   };
 

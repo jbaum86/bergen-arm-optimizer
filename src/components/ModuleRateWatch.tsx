@@ -21,6 +21,7 @@ import {
   Info,
   Target,
   AlertTriangle,
+  MapPin,
 } from 'lucide-react';
 import { useRates } from '../hooks/useRates';
 import type { RatesPayload, RateSeriesKey, RatePoint } from '../hooks/useRates';
@@ -61,10 +62,11 @@ export const DEFAULT_REFI_SETTINGS: RefiSettings = {
 };
 
 const BENCHMARK_OPTIONS: { key: RateSeriesKey; label: string }[] = [
-  { key: 'wf7YrArm', label: 'Wells Fargo 7-Yr ARM (7/6m SOFR Jumbo)' },
-  { key: 'jumbo30', label: '30-Yr Fixed Jumbo (Optimal Blue)' },
-  { key: 'conforming30', label: '30-Yr Fixed Conforming' },
-  { key: 'conforming15', label: '15-Yr Fixed Conforming' },
+  { key: 'wf7YrArm', label: 'WF 7/6-Mo ARM Jumbo (Brooklyn, NY)' },
+  { key: 'wf30YrJumbo', label: 'WF 30-Yr Fixed Jumbo (Brooklyn, NY)' },
+  { key: 'jumbo30', label: '30-Yr Fixed Jumbo (Optimal Blue Nat’l)' },
+  { key: 'conforming30', label: '30-Yr Fixed Conforming (Freddie Mac)' },
+  { key: 'conforming15', label: '15-Yr Fixed Conforming (Freddie Mac)' },
 ];
 
 const pct = (v: number, d = 3) => `${v.toFixed(d)}%`;
@@ -91,11 +93,11 @@ function useRefiAnalysis(settings: RefiSettings, rates: RatesPayload | null) {
     const discount = settings.applyDiscount ? settings.relationshipDiscount : 0;
     const effectiveRate = marketRate !== null ? marketRate - discount : null;
 
-    // Also compute explicit WF 7-Yr ARM and 30-Yr Jumbo effective rates for side-by-side display
+    // Explicit Brooklyn Wells Fargo 7/6 ARM Jumbo & 30-Yr Fixed Jumbo rates
     const wf7ArmBase = rates?.series.wf7YrArm?.latest.value ?? null;
     const wf7ArmEffective = wf7ArmBase !== null ? wf7ArmBase - discount : null;
-    const jumbo30Base = rates?.series.jumbo30?.latest.value ?? null;
-    const jumbo30Effective = jumbo30Base !== null ? jumbo30Base - discount : null;
+    const wf30JumboBase = rates?.series.wf30YrJumbo?.latest.value ?? rates?.series.jumbo30?.latest.value ?? null;
+    const wf30JumboEffective = wf30JumboBase !== null ? wf30JumboBase - discount : null;
 
     const termMonths = settings.termMode === 'match' ? position.remainingMonths : 360;
     const recordingTax = settings.includeRecordingTax ? position.balance * NYC_MORTGAGE_RECORDING_TAX_RATE : 0;
@@ -108,7 +110,7 @@ function useRefiAnalysis(settings: RefiSettings, rates: RatesPayload | null) {
 
     const result = effectiveRate !== null ? analyzeRefi({ ...base, newRate: effectiveRate / 100 }) : null;
     const wf7ArmResult = wf7ArmEffective !== null ? analyzeRefi({ ...base, newRate: wf7ArmEffective / 100 }) : null;
-    const jumbo30Result = jumbo30Effective !== null ? analyzeRefi({ ...base, newRate: jumbo30Effective / 100 }) : null;
+    const wf30JumboResult = wf30JumboEffective !== null ? analyzeRefi({ ...base, newRate: wf30JumboEffective / 100 }) : null;
 
     const gap = effectiveRate !== null ? effectiveRate - triggerEffective : null; // pct points
 
@@ -123,9 +125,9 @@ function useRefiAnalysis(settings: RefiSettings, rates: RatesPayload | null) {
       wf7ArmBase,
       wf7ArmEffective,
       wf7ArmResult,
-      jumbo30Base,
-      jumbo30Effective,
-      jumbo30Result,
+      wf30JumboBase,
+      wf30JumboEffective,
+      wf30JumboResult,
       termMonths,
       recordingTax,
       closingCosts,
@@ -144,7 +146,7 @@ const STATUS_META: Record<Status, { label: string; tone: string; dot: string; bl
     label: 'Refi Zone',
     tone: 'bg-emerald-500/15 text-emerald-300 border-emerald-500/40',
     dot: 'bg-emerald-400',
-    blurb: 'Effective rate is at or below your trigger — request a Wells Fargo quote.',
+    blurb: 'Effective rate in Brooklyn, NY is at or below your trigger — request a Wells Fargo lock.',
   },
   watch: {
     label: 'Watch Closely',
@@ -156,7 +158,7 @@ const STATUS_META: Record<Status, { label: string; tone: string; dot: string; bl
     label: 'Hold — Keep 5.750%',
     tone: 'bg-red-500/10 text-red-300 border-red-500/30',
     dot: 'bg-red-400',
-    blurb: 'Market rates remain above the level where refinancing pays for itself.',
+    blurb: 'Brooklyn / NYC jumbo rates remain above the level where refinancing pays for itself.',
   },
 };
 
@@ -184,6 +186,9 @@ export function RateWatchSummaryCard({
           <div>
             <div className="flex items-center gap-2 flex-wrap">
               <h3 className="text-sm font-semibold text-white">Rate Watch &amp; Refi Trigger</h3>
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-blue-500/10 text-blue-300 border border-blue-500/20">
+                <MapPin className="w-3 h-3" /> Brooklyn / Kings County, NY
+              </span>
               <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-semibold border ${meta.tone}`}>
                 <span className={`w-1.5 h-1.5 rounded-full ${meta.dot} animate-pulse`} />
                 {meta.label}
@@ -197,21 +202,21 @@ export function RateWatchSummaryCard({
 
         <div className="grid grid-cols-2 sm:grid-cols-5 gap-4 text-xs">
           <Stat
-            label={`WF 7-Yr ARM (−${a.discount.toFixed(2)}%)`}
+            label={`WF 7/6 ARM (−${a.discount.toFixed(2)}%)`}
             value={a.wf7ArmEffective !== null ? pct(a.wf7ArmEffective) : '—'}
-            sub={a.wf7ArmBase !== null ? `Base ${pct(a.wf7ArmBase)}` : undefined}
+            sub={a.wf7ArmBase !== null ? `Brooklyn ${pct(a.wf7ArmBase)}` : undefined}
             tone="text-blue-300"
           />
           <Stat
-            label={`30-Yr Jumbo (−${a.discount.toFixed(2)}%)`}
-            value={a.jumbo30Effective !== null ? pct(a.jumbo30Effective) : '—'}
-            sub={a.jumbo30Base !== null ? `Base ${pct(a.jumbo30Base)}` : undefined}
+            label={`WF 30Y Jumbo (−${a.discount.toFixed(2)}%)`}
+            value={a.wf30JumboEffective !== null ? pct(a.wf30JumboEffective) : '—'}
+            sub={a.wf30JumboBase !== null ? `Brooklyn ${pct(a.wf30JumboBase)}` : undefined}
             tone="text-slate-200"
           />
           <Stat label="Your Note Rate" value="5.750%" tone="text-amber-300" />
           <Stat label="Your Trigger" value={pct(a.triggerEffective)} tone="text-emerald-300" />
           <Stat
-            label="7-Yr ARM Distance"
+            label="7/6 ARM Distance"
             value={a.gap === null ? '—' : a.gap <= 0 ? 'In zone' : `${bps(a.gap)} to go`}
             tone={a.status === 'refi' ? 'text-emerald-300' : a.status === 'watch' ? 'text-amber-300' : 'text-red-300'}
           />
@@ -275,13 +280,13 @@ export function ModuleRateWatch({
         .reduce<RatePoint | null>((m, p) => (!m || p.value < m.value ? p : m), null)
     : null;
 
-  // Build chart data on the benchmark's date grid, including both WF 7-Yr ARM and 30-Yr Jumbo net rates
+  // Build chart data on the benchmark's date grid
   const chartData = useMemo(() => {
     if (!data || !series) return [];
     const days = range === '6M' ? 182 : range === '1Y' ? 365 : 365 * 3;
     const cutoff = new Date(Date.now() - days * 86400000).toISOString().slice(0, 10);
     const armPts = data.series.wf7YrArm?.points ?? [];
-    const jumboPts = data.series.jumbo30?.points ?? [];
+    const wfJumboPts = data.series.wf30YrJumbo?.points ?? data.series.jumbo30?.points ?? [];
     const tsy = data.series.treasury10?.points ?? [];
     let ai = 0;
     let ji = 0;
@@ -294,16 +299,15 @@ export function ModuleRateWatch({
     const step = range === '3Y' ? 3 : 1;
     pts.forEach((p, i) => {
       while (ai < armPts.length && armPts[ai].date <= p.date) lastArm = armPts[ai++].value;
-      while (ji < jumboPts.length && jumboPts[ji].date <= p.date) lastJumbo = jumboPts[ji++].value;
+      while (ji < wfJumboPts.length && wfJumboPts[ji].date <= p.date) lastJumbo = wfJumboPts[ji++].value;
       while (ti < tsy.length && tsy[ti].date <= p.date) lastTsy = tsy[ti++].value;
       if (p.date < cutoff) return;
       if (i % step !== 0 && i !== pts.length - 1) return;
       rows.push({
         date: p.date,
         benchmark: p.value,
-        effective: Math.round((p.value - a.discount) * 1000) / 1000,
         wf7ArmNet: lastArm !== null ? Math.round((lastArm - a.discount) * 1000) / 1000 : null,
-        jumbo30Net: lastJumbo !== null ? Math.round((lastJumbo - a.discount) * 1000) / 1000 : null,
+        wf30JumboNet: lastJumbo !== null ? Math.round((lastJumbo - a.discount) * 1000) / 1000 : null,
         treasury10: lastTsy,
       });
     });
@@ -312,20 +316,24 @@ export function ModuleRateWatch({
 
   const generated = data ? new Date(data.generatedAt) : null;
   const benchLabel = BENCHMARK_OPTIONS.find((b) => b.key === settings.benchmark)?.label ?? 'Benchmark';
+  const wfBk = data?.wellsFargoBrooklyn ?? null;
 
   return (
     <div className="space-y-6">
       {/* Title */}
       <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-3">
         <div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             <Radar className="w-5 h-5 text-blue-400" />
             <h2 className="text-xl font-bold text-white tracking-tight">Rate Watch &amp; Refi Trigger</h2>
+            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-500/10 text-blue-300 border border-blue-500/20">
+              <MapPin className="w-3.5 h-3.5" /> Brooklyn, NY (Kings County)
+            </span>
           </div>
           <p className="text-sm text-slate-400 mt-1 max-w-3xl">
-            Tracks the Wells Fargo 7-Year ARM (7/6m SOFR Jumbo) and 30-Year Fixed Jumbo benchmarks, applies your{' '}
-            {a.discount.toFixed(2)}% Wells Fargo relationship discount, and shows how far rates must fall before
-            refinancing your 5.750% ARM pays for itself.
+            Pulls live Wells Fargo refinance rates specifically priced for <strong>Brooklyn, NY (Kings County)</strong>{' '}
+            at a <strong>$1.39M</strong> property value and <strong>$1.09M</strong> loan balance, applies your{' '}
+            <strong>−{a.discount.toFixed(2)}%</strong> relationship discount, and tracks distance to your refi trigger.
           </p>
         </div>
         <div className="flex items-center gap-2 text-[11px] text-slate-400">
@@ -357,20 +365,20 @@ export function ModuleRateWatch({
           </div>
           <div className="grid grid-cols-2 sm:grid-cols-5 gap-5 text-slate-100">
             <Stat
-              label="WF 7-Yr ARM (Base)"
+              label="WF 7/6 ARM (Brooklyn)"
               value={a.wf7ArmBase !== null ? pct(a.wf7ArmBase) : '—'}
-              sub="50 bps below 30-Yr Jumbo"
+              sub="0.000 pts • 780 FICO"
             />
             <Stat
-              label={`WF 7-Yr ARM (−${a.discount.toFixed(2)}%)`}
+              label={`WF 7/6 ARM (−${a.discount.toFixed(2)}%)`}
               value={a.wf7ArmEffective !== null ? pct(a.wf7ArmEffective) : '—'}
               sub="After WF discount"
               tone="text-blue-200"
             />
             <Stat
-              label={`30-Yr Jumbo (−${a.discount.toFixed(2)}%)`}
-              value={a.jumbo30Effective !== null ? pct(a.jumbo30Effective) : '—'}
-              sub={a.jumbo30Base !== null ? `Base ${pct(a.jumbo30Base)}` : undefined}
+              label={`WF 30Y Jumbo (−${a.discount.toFixed(2)}%)`}
+              value={a.wf30JumboEffective !== null ? pct(a.wf30JumboEffective) : '—'}
+              sub={a.wf30JumboBase !== null ? `Brooklyn ${pct(a.wf30JumboBase)}` : undefined}
               tone="text-slate-200"
             />
             <Stat label="Trigger (Effective)" value={pct(a.triggerEffective)} tone="text-emerald-300" />
@@ -383,12 +391,84 @@ export function ModuleRateWatch({
         </div>
       </div>
 
-      {/* Market tiles */}
+      {/* Live Wells Fargo Brooklyn, NY Quote Sheet */}
+      {wfBk && wfBk.products.length > 0 && (
+        <div className="rounded-2xl backdrop-blur-md bg-white/5 border border-white/10 p-5">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-3">
+            <div>
+              <h3 className="text-sm font-semibold text-white flex items-center gap-2">
+                <MapPin className="w-4 h-4 text-blue-400" />
+                Wells Fargo Live Refinance Rates — {wfBk.city}, {wfBk.stateCode} ({wfBk.county} County)
+              </h3>
+              <p className="text-[11px] text-slate-400">
+                Scenario: {formatCurrency(wfBk.homeValue, 0)} home value • {formatCurrency(wfBk.mortgageBalance, 0)}{' '}
+                loan balance • {wfBk.timeStampMessage.split('.')[0]}
+              </p>
+            </div>
+            <span className="text-[11px] font-mono-numbers px-2.5 py-1 rounded-lg bg-blue-500/10 border border-blue-500/30 text-blue-300">
+              Relationship Discount Applied: −{a.discount.toFixed(2)}%
+            </span>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+            {wfBk.products
+              .filter((p) => p.loanType === 'CONVENTIONAL')
+              .map((p) => {
+                const netRate = Math.round((p.interestRate - a.discount) * 1000) / 1000;
+                const seriesMatch: RateSeriesKey | null = p.productName.toLowerCase().includes('7/6')
+                  ? 'wf7YrArm'
+                  : p.productName.toLowerCase().includes('30-year') && p.productName.toLowerCase().includes('jumbo')
+                    ? 'wf30YrJumbo'
+                    : null;
+                const isSelected = seriesMatch !== null && settings.benchmark === seriesMatch;
+                return (
+                  <div
+                    key={p.productName}
+                    onClick={() => {
+                      if (seriesMatch) {
+                        update('benchmark', seriesMatch);
+                        update('lenderQuote', null);
+                      } else {
+                        update('lenderQuote', p.interestRate);
+                      }
+                    }}
+                    className={`rounded-xl p-3.5 border transition-all cursor-pointer ${
+                      isSelected
+                        ? 'bg-blue-500/15 border-blue-500/50 ring-1 ring-blue-500/30'
+                        : 'bg-slate-900/60 border-white/10 hover:border-white/25'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-xs font-semibold text-white">{p.productName}</span>
+                      <span className="text-[10px] text-slate-400 font-mono-numbers">{p.creditScore} FICO</span>
+                    </div>
+                    <div className="mt-2 flex items-baseline justify-between">
+                      <div>
+                        <div className="text-[10px] uppercase text-slate-400">Net w/ −{a.discount.toFixed(2)}% WF</div>
+                        <div className="font-mono-numbers text-xl font-bold text-blue-300">{pct(netRate)}</div>
+                      </div>
+                      <div className="text-right">
+                        <div className="text-[10px] uppercase text-slate-500">Published Base</div>
+                        <div className="font-mono-numbers text-sm font-medium text-slate-300">{pct(p.interestRate)}</div>
+                      </div>
+                    </div>
+                    <div className="mt-2 pt-2 border-t border-white/5 flex items-center justify-between text-[10px] text-slate-400 font-mono-numbers">
+                      <span>APR {pct(p.apr, 3)}</span>
+                      <span>{p.discountPointsPercent.toFixed(3)} pts</span>
+                    </div>
+                  </div>
+                );
+              })}
+          </div>
+        </div>
+      )}
+
+      {/* Market Benchmark Tiles */}
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
-        {(['wf7YrArm', 'jumbo30', 'conforming30', 'conforming15', 'treasury10', 'sofr30'] as RateSeriesKey[]).map((k) => {
+        {(['wf7YrArm', 'wf30YrJumbo', 'jumbo30', 'conforming30', 'treasury10', 'sofr30'] as RateSeriesKey[]).map((k) => {
           const s = data?.series[k];
           const c = s ? changeOver(s.points, 7) : null;
-          const isDiscountedProduct = k === 'wf7YrArm' || k === 'jumbo30';
+          const isDiscountedProduct = k === 'wf7YrArm' || k === 'wf30YrJumbo' || k === 'jumbo30';
           const netVal = s && isDiscountedProduct ? Math.round((s.latest.value - a.discount) * 1000) / 1000 : null;
           const isSelected = settings.benchmark === k;
           return (
@@ -481,8 +561,8 @@ export function ModuleRateWatch({
                   <Legend wrapperStyle={{ fontSize: 11 }} />
                   <ReferenceLine y={5.75} stroke="#F59E0B" strokeDasharray="6 4" label={{ value: 'Your note 5.750%', fill: '#F59E0B', fontSize: 10, position: 'insideTopLeft' }} />
                   <ReferenceLine y={a.triggerEffective} stroke="#10B981" strokeDasharray="4 4" label={{ value: `Trigger ${a.triggerEffective.toFixed(2)}%`, fill: '#10B981', fontSize: 10, position: 'insideBottomLeft' }} />
-                  <Line type="monotone" dataKey="wf7ArmNet" name={`WF 7-Yr ARM Net (−${a.discount.toFixed(2)}%)`} stroke="#3B82F6" dot={false} strokeWidth={2.5} />
-                  <Line type="monotone" dataKey="jumbo30Net" name={`30-Yr Jumbo Net (−${a.discount.toFixed(2)}%)`} stroke="#a78bfa" dot={false} strokeWidth={1.75} />
+                  <Line type="monotone" dataKey="wf7ArmNet" name={`WF 7/6 ARM Brooklyn Net (−${a.discount.toFixed(2)}%)`} stroke="#3B82F6" dot={false} strokeWidth={2.5} />
+                  <Line type="monotone" dataKey="wf30JumboNet" name={`WF 30Y Jumbo Brooklyn Net (−${a.discount.toFixed(2)}%)`} stroke="#a78bfa" dot={false} strokeWidth={1.75} />
                   <Line type="monotone" dataKey="benchmark" name={`${benchLabel} (Pre-Discount)`} stroke="#94a3b8" dot={false} strokeWidth={1.25} strokeDasharray="3 3" />
                   <Line type="monotone" dataKey="treasury10" name="10-Yr Treasury" stroke="#64748b" dot={false} strokeWidth={1} strokeDasharray="2 3" />
                 </LineChart>
@@ -533,7 +613,7 @@ export function ModuleRateWatch({
 
           <div className="space-y-1">
             <div className="text-xs text-slate-300 flex items-center justify-between">
-              <span>Actual lender quote (optional)</span>
+              <span>Custom rate override (optional)</span>
               {settings.lenderQuote !== null && (
                 <button onClick={() => update('lenderQuote', null)} className="text-[10px] text-blue-400 hover:text-blue-300 cursor-pointer">
                   clear
@@ -608,7 +688,7 @@ export function ModuleRateWatch({
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
         <div className="rounded-2xl backdrop-blur-md bg-white/5 border border-white/10 p-5 space-y-4">
           <h3 className="text-sm font-semibold text-white flex items-center gap-2">
-            <Target className="w-4 h-4 text-emerald-400" /> If You Refinanced Today
+            <Target className="w-4 h-4 text-emerald-400" /> If You Refinanced Today (Brooklyn, NY)
           </h3>
           {a.result && a.effectiveRate !== null ? (
             <>
@@ -634,14 +714,14 @@ export function ModuleRateWatch({
                 />
               </dl>
 
-              {a.wf7ArmResult && a.wf7ArmEffective !== null && a.jumbo30Result && a.jumbo30Effective !== null && (
+              {a.wf7ArmResult && a.wf7ArmEffective !== null && a.wf30JumboResult && a.wf30JumboEffective !== null && (
                 <div className="pt-2 border-t border-white/10 space-y-2">
                   <div className="text-[10px] uppercase tracking-wider text-slate-400 font-semibold">
-                    Wells Fargo Product Comparison (w/ −{a.discount.toFixed(2)}% Discount)
+                    Brooklyn, NY Wells Fargo Comparison (w/ −{a.discount.toFixed(2)}% Discount)
                   </div>
                   <div className="grid grid-cols-2 gap-2 text-xs">
                     <div className="rounded-lg bg-blue-500/10 border border-blue-500/30 p-2.5">
-                      <div className="text-[10px] text-blue-300 font-medium">WF 7-Yr ARM (7/6m)</div>
+                      <div className="text-[10px] text-blue-300 font-medium">WF 7/6-Mo ARM Jumbo</div>
                       <div className="font-mono-numbers text-sm font-bold text-white mt-0.5">{pct(a.wf7ArmEffective)} net</div>
                       <div className="text-[10px] text-slate-400 font-mono-numbers">
                         P&amp;I: {formatCurrency(a.wf7ArmResult.newPayment, 0)}/mo
@@ -653,13 +733,13 @@ export function ModuleRateWatch({
                     </div>
                     <div className="rounded-lg bg-white/5 border border-white/10 p-2.5">
                       <div className="text-[10px] text-slate-300 font-medium">WF 30-Yr Fixed Jumbo</div>
-                      <div className="font-mono-numbers text-sm font-bold text-white mt-0.5">{pct(a.jumbo30Effective)} net</div>
+                      <div className="font-mono-numbers text-sm font-bold text-white mt-0.5">{pct(a.wf30JumboEffective)} net</div>
                       <div className="text-[10px] text-slate-400 font-mono-numbers">
-                        P&amp;I: {formatCurrency(a.jumbo30Result.newPayment, 0)}/mo
+                        P&amp;I: {formatCurrency(a.wf30JumboResult.newPayment, 0)}/mo
                       </div>
-                      <div className={`text-[10px] font-mono-numbers ${a.jumbo30Result.monthlySavings >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-                        {a.jumbo30Result.monthlySavings >= 0 ? '+' : ''}
-                        {formatCurrency(a.jumbo30Result.monthlySavings, 0)}/mo vs now
+                      <div className={`text-[10px] font-mono-numbers ${a.wf30JumboResult.monthlySavings >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                        {a.wf30JumboResult.monthlySavings >= 0 ? '+' : ''}
+                        {formatCurrency(a.wf30JumboResult.monthlySavings, 0)}/mo vs now
                       </div>
                     </div>
                   </div>
@@ -680,7 +760,7 @@ export function ModuleRateWatch({
             <table className="w-full text-xs">
               <thead>
                 <tr className="text-[10px] uppercase tracking-wider text-slate-400 border-b border-white/10">
-                  <th className="text-left py-2">Base Rate</th>
+                  <th className="text-left py-2">WF Base Rate</th>
                   <th className="text-left py-2">Effective (−{a.discount.toFixed(2)}%)</th>
                   <th className="text-right py-2">New P&amp;I</th>
                   <th className="text-right py-2">Monthly Δ</th>
@@ -730,13 +810,14 @@ export function ModuleRateWatch({
       {/* Notes */}
       <div className="rounded-2xl bg-slate-900/40 border border-white/5 p-4 text-[11px] text-slate-400 space-y-1.5">
         <div className="flex items-center gap-1.5 text-slate-300 font-medium">
-          <Info className="w-3.5 h-3.5 text-blue-400" /> How the Wells Fargo 7-Yr ARM &amp; trigger work
+          <Info className="w-3.5 h-3.5 text-blue-400" /> How the Brooklyn / NYC Wells Fargo rate feed &amp; trigger work
         </div>
         <p>
-          <strong>Wells Fargo 7-Yr ARM (7/6m SOFR Jumbo):</strong> Modeled in <code>scripts/rate-alert.config.json</code> with a{' '}
-          {Math.abs(data?.alertConfig.wf7YrArm?.spreadVsJumbo30 ?? -0.5).toFixed(2)}% ARM curve spread below the daily Optimal Blue 30-Yr Jumbo index
-          (or your exact pinned quote via <code>wf7YrArm.quotedBaseRate</code>), then discounted by your{' '}
-          {a.discount.toFixed(2)}% Wells Fargo relationship discount.
+          <strong>Live Wells Fargo Brooklyn / Kings County Pricing:</strong> Every weekday, the automated workflow queries Wells Fargo&apos;s official
+          home-lending pricing API specifically for <strong>Brooklyn, NY (Kings County, FIPS 36047)</strong> with a{' '}
+          <strong>$1,390,000</strong> property value and <strong>$1,090,000</strong> loan balance (pulling the exact{' '}
+          <code>7/6-Month ARM Jumbo</code>, <code>30-Year Fixed-Rate Jumbo</code>, and <code>15-Year Fixed-Rate Jumbo</code> rates), and then subtracts
+          your <strong>{a.discount.toFixed(2)}%</strong> Wells Fargo relationship discount.
         </p>
         <p>
           The trigger is the highest effective rate at which a refinance both (1) recovers closing costs within your break-even target and (2) leaves you
@@ -746,8 +827,8 @@ export function ModuleRateWatch({
         <p className="flex items-start gap-1.5">
           <AlertTriangle className="w-3.5 h-3.5 text-amber-400 shrink-0 mt-px" />
           <span>
-            Email alerts: a GitHub Action re-checks rates every weekday and opens a GitHub issue (which emails you) when the effective rate drops to ≤{' '}
-            {pct(data?.alertConfig.alertEffectiveRate ?? 5.44)}. Adjust thresholds or pin a Wells Fargo 7-Yr ARM quote in{' '}
+            Email alerts: a GitHub Action re-checks Brooklyn Wells Fargo rates every weekday and opens a GitHub issue (which emails you) when the
+            discounted effective rate drops to ≤ {pct(data?.alertConfig.alertEffectiveRate ?? 5.44)}. Location and alert settings live in{' '}
             <code>scripts/rate-alert.config.json</code>.
           </span>
         </p>

@@ -2,7 +2,8 @@ import { useEffect, useState } from 'react';
 
 export interface RatePoint {
   date: string;
-  value: number; // percent, e.g. 7.094
+  value: number; // percent, e.g. 6.625
+  live?: boolean;
 }
 
 export interface RateSeries {
@@ -18,18 +19,51 @@ export interface RateSeries {
 
 export type RateSeriesKey =
   | 'wf7YrArm'
+  | 'wf30YrJumbo'
   | 'jumbo30'
   | 'conforming30'
   | 'conforming15'
   | 'treasury10'
   | 'sofr30';
 
-export interface Wf7YrArmConfig {
+export interface WfProductConfig {
+  productName?: string;
   label?: string;
   quotedBaseRate?: number | null;
   spreadVsJumbo30?: number;
   relationshipDiscount?: number;
   fixedPeriodMonths?: number;
+}
+
+export interface WellsFargoBrooklynProduct {
+  productName: string;
+  productType: string;
+  loanType: string;
+  loanTerm: string;
+  loanAmount: number;
+  interestRate: number;
+  effectiveRate: number;
+  apr: number;
+  monthlyPaymentAmount: number;
+  fullyIndexedRate: number | null;
+  firstAdjustmentPeriod: number;
+  discountPointsPercent: number;
+  discountPointsAmount: number;
+  closingCostAmount: number;
+  creditScore: number;
+}
+
+export interface WellsFargoBrooklynSnapshot {
+  date: string;
+  city: string;
+  county: string;
+  stateCode: string;
+  fipsCode: string;
+  homeValue: number;
+  mortgageBalance: number;
+  timeStampMessage: string;
+  relationshipDiscount: number;
+  products: WellsFargoBrooklynProduct[];
 }
 
 export interface RatesPayload {
@@ -39,10 +73,12 @@ export interface RatesPayload {
     currentNoteRate?: number;
     relationshipDiscount?: number;
     benchmarkSeries?: RateSeriesKey;
-    wf7YrArm?: Wf7YrArmConfig;
+    wf7YrArm?: WfProductConfig;
+    wf30YrJumbo?: WfProductConfig;
     alertEffectiveRate?: number;
     watchEffectiveRate?: number;
   };
+  wellsFargoBrooklyn?: WellsFargoBrooklynSnapshot | null;
   series: Partial<Record<RateSeriesKey, RateSeries>>;
 }
 
@@ -54,8 +90,7 @@ interface UseRatesResult {
 
 /**
  * Loads the market-rate snapshot (public/rates.json) that GitHub Actions
- * refreshes every weekday from FRED. Fetched at runtime so the dashboard
- * always shows the latest deployed snapshot.
+ * refreshes every weekday from Wells Fargo (Brooklyn / Kings County, NY) and FRED.
  */
 export function useRates(): UseRatesResult {
   const [state, setState] = useState<UseRatesResult>({ data: null, error: null, loading: true });

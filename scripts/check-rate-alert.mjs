@@ -2,8 +2,9 @@
 // Reads public/rates.json and decides whether a refinance alert should fire.
 // Emits GitHub Actions outputs: status (refi|watch|hold), effective, market, body.
 //
-// Evaluates both the Wells Fargo 7-Yr ARM (7/6m SOFR Jumbo) and the 30-Yr Fixed
-// Jumbo benchmark after the 0.50% Wells Fargo relationship discount.
+// Evaluates Wells Fargo's live Brooklyn / Kings County, NY refinance rates
+// (7/6-Month ARM Jumbo and 30-Year Fixed-Rate Jumbo) after the 0.50%
+// Wells Fargo relationship discount.
 
 import { readFile, appendFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
@@ -24,10 +25,12 @@ const discount = cfg.wf7YrArm?.relationshipDiscount ?? cfg.relationshipDiscount 
 const market = series.latest.value;
 const effective = Math.round((market - discount) * 1000) / 1000;
 
-const jumboMarket = data.series?.jumbo30?.latest?.value ?? null;
-const jumboEffective = jumboMarket !== null ? Math.round((jumboMarket - discount) * 1000) / 1000 : null;
-const armMarket = data.series?.wf7YrArm?.latest?.value ?? null;
-const armEffective = armMarket !== null ? Math.round((armMarket - discount) * 1000) / 1000 : null;
+const wfArmMarket = data.series?.wf7YrArm?.latest?.value ?? null;
+const wfArmEffective = wfArmMarket !== null ? Math.round((wfArmMarket - discount) * 1000) / 1000 : null;
+const wfJumboMarket = data.series?.wf30YrJumbo?.latest?.value ?? null;
+const wfJumboEffective = wfJumboMarket !== null ? Math.round((wfJumboMarket - discount) * 1000) / 1000 : null;
+const obJumboMarket = data.series?.jumbo30?.latest?.value ?? null;
+const obJumboEffective = obJumboMarket !== null ? Math.round((obJumboMarket - discount) * 1000) / 1000 : null;
 
 const alertAt = cfg.alertEffectiveRate ?? 5.44;
 const watchAt = cfg.watchEffectiveRate ?? 5.815;
@@ -39,24 +42,27 @@ const mention = cfg.notifyGithubUser ? `@${cfg.notifyGithubUser} ` : '';
 const rows = [
   `| Metric | Value |`,
   `|---|---|`,
-  armMarket !== null
-    ? `| Wells Fargo 7-Yr ARM Base (${data.series.wf7YrArm.latest.date}) | ${armMarket.toFixed(3)}% |`
+  wfArmMarket !== null
+    ? `| Wells Fargo 7/6-Mo ARM Jumbo — Brooklyn, NY (${data.series.wf7YrArm.latest.date}) | ${wfArmMarket.toFixed(3)}% |`
     : null,
-  armEffective !== null
-    ? `| **WF 7-Yr ARM Effective (−${discount.toFixed(2)}% discount)** | **${armEffective.toFixed(3)}%** |`
+  wfArmEffective !== null
+    ? `| **WF 7/6-Mo ARM Jumbo Effective (−${discount.toFixed(2)}% discount)** | **${wfArmEffective.toFixed(3)}%** |`
     : null,
-  jumboMarket !== null
-    ? `| 30-Yr Fixed Jumbo (${data.series.jumbo30.latest.date}) | ${jumboMarket.toFixed(3)}% |`
+  wfJumboMarket !== null
+    ? `| Wells Fargo 30-Yr Fixed Jumbo — Brooklyn, NY (${data.series.wf30YrJumbo.latest.date}) | ${wfJumboMarket.toFixed(3)}% |`
     : null,
-  jumboEffective !== null
-    ? `| 30-Yr Fixed Jumbo Effective (−${discount.toFixed(2)}% discount) | ${jumboEffective.toFixed(3)}% |`
+  wfJumboEffective !== null
+    ? `| WF 30-Yr Fixed Jumbo Effective (−${discount.toFixed(2)}% discount) | ${wfJumboEffective.toFixed(3)}% |`
+    : null,
+  obJumboMarket !== null
+    ? `| 30-Yr Fixed Jumbo Nat'l Index (${data.series.jumbo30.latest.date}) | ${obJumboMarket.toFixed(3)}% |`
     : null,
   `| Current note rate | ${noteRate.toFixed(3)}% |`,
   `| Alert threshold | ≤ ${alertAt.toFixed(3)}% |`,
 ].filter(Boolean);
 
 const body = [
-  `${mention}Mortgage rates have reached your refinance trigger.`,
+  `${mention}Mortgage rates in Brooklyn, NY (Kings County) have reached your refinance trigger.`,
   '',
   ...rows,
   '',
@@ -67,12 +73,14 @@ const body = [
 console.log(
   `Active benchmark (${series.label}): ${market.toFixed(3)}% − ${discount.toFixed(3)}% = ${effective.toFixed(3)}% effective → status: ${status}`
 );
-if (jumboEffective !== null && armEffective !== null) {
+if (wfArmEffective !== null) {
   console.log(
-    `  • WF 7-Yr ARM: ${armMarket.toFixed(3)}% base → ${armEffective.toFixed(3)}% net (−${discount.toFixed(2)}%)`
+    `  • WF 7/6-Mo ARM Jumbo (Brooklyn, NY): ${wfArmMarket.toFixed(3)}% base → ${wfArmEffective.toFixed(3)}% net (−${discount.toFixed(2)}%)`
   );
+}
+if (wfJumboEffective !== null) {
   console.log(
-    `  • 30-Yr Jumbo: ${jumboMarket.toFixed(3)}% base → ${jumboEffective.toFixed(3)}% net (−${discount.toFixed(2)}%)`
+    `  • WF 30-Yr Fixed Jumbo (Brooklyn, NY): ${wfJumboMarket.toFixed(3)}% base → ${wfJumboEffective.toFixed(3)}% net (−${discount.toFixed(2)}%)`
   );
 }
 
