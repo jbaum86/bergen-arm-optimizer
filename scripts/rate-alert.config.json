@@ -1,7 +1,14 @@
 {
   "currentNoteRate": 5.75,
   "relationshipDiscount": 0.5,
-  "benchmarkSeries": "jumbo30",
+  "benchmarkSeries": "wf7YrArm",
+  "wf7YrArm": {
+    "label": "Wells Fargo 7-Yr ARM (7/6m SOFR Jumbo)",
+    "quotedBaseRate": null,
+    "spreadVsJumbo30": -0.5,
+    "relationshipDiscount": 0.5,
+    "fixedPeriodMonths": 84
+  },
   "alertEffectiveRate": 5.44,
   "watchEffectiveRate": 5.815,
   "notifyGithubUser": "jbaum86"

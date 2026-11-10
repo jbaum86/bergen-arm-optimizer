@@ -10,10 +10,27 @@ export interface RateSeries {
   label: string;
   frequency: 'daily' | 'weekly';
   latest: RatePoint;
+  effectiveLatest?: RatePoint;
+  relationshipDiscount?: number;
+  spreadVsJumbo30?: number;
   points: RatePoint[];
 }
 
-export type RateSeriesKey = 'jumbo30' | 'conforming30' | 'conforming15' | 'treasury10' | 'sofr30';
+export type RateSeriesKey =
+  | 'wf7YrArm'
+  | 'jumbo30'
+  | 'conforming30'
+  | 'conforming15'
+  | 'treasury10'
+  | 'sofr30';
+
+export interface Wf7YrArmConfig {
+  label?: string;
+  quotedBaseRate?: number | null;
+  spreadVsJumbo30?: number;
+  relationshipDiscount?: number;
+  fixedPeriodMonths?: number;
+}
 
 export interface RatesPayload {
   generatedAt: string;
@@ -22,6 +39,7 @@ export interface RatesPayload {
     currentNoteRate?: number;
     relationshipDiscount?: number;
     benchmarkSeries?: RateSeriesKey;
+    wf7YrArm?: Wf7YrArmConfig;
     alertEffectiveRate?: number;
     watchEffectiveRate?: number;
   };
@@ -63,4 +81,3 @@ export function useRates(): UseRatesResult {
 
   return state;
 }
-

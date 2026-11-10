@@ -2,11 +2,13 @@
 // Fetches public mortgage & benchmark rate series from FRED (St. Louis Fed)
 // and writes public/rates.json for the Rate Watch & Refi Trigger module.
 //
+// Also synthesizes the "wf7YrArm" (Wells Fargo 7-Yr ARM / 7/6m SOFR Jumbo)
+// series from the config in scripts/rate-alert.config.json (either from an
+// explicit quotedBaseRate or by applying spreadVsJumbo30 to OBMMIJUMBO30YF),
+// which then gets discounted by the 0.50% Wells Fargo relationship discount.
+//
 // Runs in GitHub Actions on a daily schedule before each build, so the
 // deployed dashboard always carries fresh market data. No API key required.
-//
-// If the network fetch fails, the previously committed public/rates.json is
-// kept so the build never breaks.
 
 import { readFile, writeFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
@@ -97,6 +99,44 @@ async function main() {
       };
       console.log(`✓ ${s.id}: ${points.length} obs, latest ${latest.date} = ${latest.value}%`);
     }
+
+    // Build Wells Fargo 7-Year ARM (7/6m SOFR Jumbo) series from jumbo30 + config
+    if (series.jumbo30) {
+      const armCfg = alertConfig.wf7YrArm ?? {};
+      const spread = typeof armCfg.spreadVsJumbo30 === 'number' ? armCfg.spreadVsJumbo30 : -0.5;
+      const discount =
+        typeof armCfg.relationshipDiscount === 'number'
+          ? armCfg.relationshipDiscount
+          : typeof alertConfig.relationshipDiscount === 'number'
+            ? alertConfig.relationshipDiscount
+            : 0.5;
+      const quoted = typeof armCfg.quotedBaseRate === 'number' ? armCfg.quotedBaseRate : null;
+
+      const armPoints = series.jumbo30.points.map((p, idx, arr) => {
+        const isLast = idx === arr.length - 1;
+        const val = isLast && quoted !== null ? quoted : Math.round((p.value + spread) * 1000) / 1000;
+        return { date: p.date, value: val };
+      });
+      const latest = armPoints[armPoints.length - 1];
+      const effectiveLatest = {
+        date: latest.date,
+        value: Math.round((latest.value - discount) * 1000) / 1000,
+      };
+
+      series.wf7YrArm = {
+        fredId: quoted !== null ? 'WF_7YR_ARM_QUOTE' : `OBMMIJUMBO30YF${spread >= 0 ? '+' : ''}${spread}`,
+        label: armCfg.label ?? 'Wells Fargo 7-Yr ARM (7/6m SOFR Jumbo)',
+        frequency: 'daily',
+        latest,
+        effectiveLatest,
+        relationshipDiscount: discount,
+        spreadVsJumbo30: spread,
+        points: armPoints,
+      };
+      console.log(
+        `✓ wf7YrArm: ${armPoints.length} obs, latest ${latest.date} = ${latest.value}% (net ${effectiveLatest.value}% after −${discount}% WF discount)`
+      );
+    }
   } catch (err) {
     console.warn(`⚠ Rate fetch failed (${err.message}). Keeping existing public/rates.json.`);
     process.exit(0);
@@ -114,4 +154,3 @@ async function main() {
 }
 
 main();
-
